@@ -1,0 +1,35 @@
+{
+  "name": "gwo-data-hub",
+  "version": "1.0.0",
+  "description": "数据中台服务 - 从亚马逊和领星ERP拉取数据",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:push": "prisma db push"
+  },
+  "keywords": [
+    "amazon",
+    "erp",
+    "data-hub"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.19.1",
+    "fastify": "^4.28.1",
+    "@fastify/cors": "^9.0.1",
+    "dotenv": "^16.4.5",
+    "axios": "^1.7.7",
+    "crypto-js": "^4.2.0",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.19.1"
+  }
+}
+

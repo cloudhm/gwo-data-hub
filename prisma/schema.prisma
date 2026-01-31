@@ -1,0 +1,434 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 亚马逊店铺数据模型
+model AmazonStore {
+  id          String   @id @default(uuid())
+  storeName   String   // 店铺名称
+  storeId     String   @unique // 店铺ID
+  region      String   // 区域（如：US, EU, JP等）
+  accessKey   String?  // API访问密钥 (Client ID)
+  secretKey   String?  // API密钥 (Client Secret)
+  refreshToken String? // Refresh Token (用于获取访问令牌)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 关联的订单数据
+  orders      AmazonOrder[]
+  // 关联的产品数据
+  products    AmazonProduct[]
+  // 关联的库存数据
+  inventories AmazonInventory[]
+  
+  @@map("amazon_stores")
+}
+
+// 亚马逊订单数据
+model AmazonOrder {
+  id              String   @id @default(uuid())
+  storeId         String
+  orderId         String   @unique // 亚马逊订单ID
+  orderDate       DateTime
+  orderStatus     String   // 订单状态
+  totalAmount     Decimal  @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  buyerName       String?
+  shippingAddress String?  @db.Text
+  orderData       Json?    // 完整的订单JSON数据
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  store           AmazonStore @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderItems      AmazonOrderItem[]
+  
+  @@index([storeId])
+  @@index([orderDate])
+  @@map("amazon_orders")
+}
+
+// 亚马逊订单项
+model AmazonOrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  sku         String   // 产品SKU
+  productName String?
+  quantity    Int
+  price       Decimal  @db.Decimal(10, 2)
+  totalPrice  Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  order       AmazonOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  @@unique([orderId, sku])
+  @@index([orderId])
+  @@index([sku])
+  @@map("amazon_order_items")
+}
+
+// 亚马逊产品数据
+model AmazonProduct {
+  id          String   @id @default(uuid())
+  storeId     String
+  asin        String   // 亚马逊标准识别号
+  sku         String   // SKU
+  title       String   @db.Text
+  price       Decimal? @db.Decimal(10, 2)
+  currency    String   @default("USD")
+  stock       Int      @default(0)
+  productData Json?    // 完整的产品JSON数据
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  store       AmazonStore @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  @@unique([storeId, asin])
+  @@index([storeId])
+  @@index([sku])
+  @@map("amazon_products")
+}
+
+// 亚马逊库存数据
+model AmazonInventory {
+  id          String   @id @default(uuid())
+  storeId     String
+  sku         String
+  quantity    Int
+  reserved    Int      @default(0) // 预留库存
+  available   Int      // 可用库存
+  inventoryData Json?  // 完整的库存JSON数据
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  store       AmazonStore @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  @@unique([storeId, sku])
+  @@index([storeId])
+  @@index([sku])
+  @@map("amazon_inventories")
+}
+
+// 领星ERP账户模型
+// 一个账户有一个APP ID和APP Secret，可以绑定多个亚马逊店铺
+model LingXingAccount {
+  id            String   @id @default(uuid())
+  name          String   // 账户名称
+  appId         String   @unique // APP ID
+  appSecret     String   // APP Secret
+  accessToken   String?  // access_token (通过接口获取)
+  refreshToken  String?  // refresh_token (用于刷新access_token)
+  tokenExpiresAt DateTime? // token过期时间
+  description   String?  // 账户描述
+  isActive      Boolean  @default(true) // 是否启用
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // 关联的亚马逊店铺（一个账户下可以有多个店铺）
+  amazonSellers LingXingSeller[]
+  // 关联的概念店铺（一个账户下可以有多个概念店铺）
+  amazonConceptSellers LingXingConceptSeller[]
+  // 关联的订单数据
+  orders        LingXingOrder[]
+  // 关联的产品数据
+  products      LingXingProduct[]
+  // 关联的库存数据
+  inventories   LingXingInventory[]
+  // 关联的用户信息（一个账户下可以有多个用户）
+  accountUsers  LingXingAccountUser[]
+  // 关联的本地产品（一个账户下可以有多个产品）
+  localProducts LingXingLocalProduct[]
+  
+  @@index([appId])
+  @@index([isActive])
+  @@map("lingxing_accounts")
+}
+
+// 领星ERP订单数据
+model LingXingOrder {
+  id              String   @id @default(uuid())
+  accountId       String   // 关联的领星账户ID
+  orderId         String   @unique // 领星订单ID
+  orderDate       DateTime
+  orderStatus     String   // 订单状态
+  totalAmount     Decimal  @db.Decimal(10, 2)
+  currency        String   @default("CNY")
+  buyerName       String?
+  shippingAddress String?  @db.Text
+  orderData       Json?    // 完整的订单JSON数据
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  account         LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  orderItems      LingXingOrderItem[]
+  
+  @@index([accountId])
+  @@index([orderDate])
+  @@map("lingxing_orders")
+}
+
+// 领星ERP订单项
+model LingXingOrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  sku         String   // 产品SKU
+  productName String?
+  quantity    Int
+  price       Decimal  @db.Decimal(10, 2)
+  totalPrice  Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  order       LingXingOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  @@unique([orderId, sku])
+  @@index([orderId])
+  @@index([sku])
+  @@map("lingxing_order_items")
+}
+
+// 领星ERP产品数据
+model LingXingProduct {
+  id          String   @id @default(uuid())
+  accountId   String   // 关联的领星账户ID
+  productId   String   // 产品ID
+  sku         String   // SKU
+  title       String   @db.Text
+  price       Decimal? @db.Decimal(10, 2)
+  currency    String   @default("CNY")
+  stock       Int      @default(0)
+  productData Json?    // 完整的产品JSON数据
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  account     LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, productId])
+  @@index([accountId])
+  @@index([sku])
+  @@map("lingxing_products")
+}
+
+// 领星ERP库存数据
+model LingXingInventory {
+  id          String   @id @default(uuid())
+  accountId   String   // 关联的领星账户ID
+  sku         String
+  quantity    Int
+  reserved    Int      @default(0) // 预留库存
+  available   Int      // 可用库存
+  inventoryData Json?  // 完整的库存JSON数据
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  account     LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, sku])
+  @@index([accountId])
+  @@index([sku])
+  @@map("lingxing_inventories")
+}
+
+// 数据同步日志
+model SyncLog {
+  id          String   @id @default(uuid())
+  source      String   // 数据源：amazon 或 lingxing
+  storeId     String
+  syncType    String   // 同步类型：orders, products, inventory
+  status      String   // 状态：success, failed, partial
+  recordCount Int      @default(0) // 同步记录数
+  errorMessage String? @db.Text
+  syncData    Json?    // 同步数据详情
+  createdAt   DateTime @default(now())
+  
+  @@index([source, storeId])
+  @@index([createdAt])
+  @@map("sync_logs")
+}
+
+// 亚马逊市场列表（基础数据）- 领星ERP基础数据
+model LingXingMarketplace {
+  id            String   @id @default(uuid())
+  mid           Int      @unique // 站点ID（领星ERP的站点ID）
+  marketplaceId String   @unique // 亚马逊市场ID
+  region        String?  // 地区（如：NA, EU, JP等）
+  awsRegion     String?  // 亚马逊地区
+  country       String?  // 商城所在国家名称
+  code          String?  // 亚马逊国家code
+  data          Json?    // 完整的市场数据
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([mid])
+  @@index([marketplaceId])
+  @@index([code])
+  @@map("lingxing_marketplaces")
+}
+
+// 亚马逊国家地区列表（基础数据）- 领星ERP基础数据
+model LingXingWorldState {
+  id                  String   @id @default(uuid())
+  countryCode         String   // 国家code
+  stateOrProvinceName String   // 地区名称
+  code                String   // 地区code
+  data                Json?    // 完整的数据
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@unique([countryCode, stateOrProvinceName, code])
+  @@index([countryCode])
+  @@index([code])
+  @@map("lingxing_world_states")
+}
+
+// 亚马逊店铺列表（基础数据）- 领星ERP基础数据
+// 注意：一个领星账户（LingXingAccount）下可以绑定多个亚马逊店铺（LingXingSeller）
+model LingXingSeller {
+  id              String   @id @default(uuid())
+  sid             Int      @unique // 店铺id（领星ERP对企业已授权店铺的唯一标识）
+  accountId       String   // 关联的领星账户ID（一个账户下可以有多个店铺）
+  mid             Int?     // 站点id
+  name            String?  // 店铺名
+  sellerId        String?  // 亚马逊店铺id
+  accountName     String?  // 店铺账户名称
+  sellerAccountId Int?     // 店铺账号id
+  region          String?  // 站点简称，例如NA指北美
+  country         String?  // 商城所在国家名称
+  hasAdsSetting   Int?     // 是否授权广告：0 否，1 是
+  marketplaceId   String?  // 市场id
+  status          Int?     // 店铺状态：0 停止同步，1 正常，2 授权异常，3 欠费停服
+  data            Json?    // 完整的数据
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个亚马逊店铺
+  account         LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([sid])
+  @@index([mid])
+  @@index([sellerId])
+  @@index([status])
+  @@index([accountId])
+  @@map("lingxing_sellers")
+}
+
+// 亚马逊概念店铺列表（基础数据）- 领星ERP基础数据
+// 注意：一个领星账户（LingXingAccount）下可以绑定多个概念店铺（LingXingConceptSeller）
+model LingXingConceptSeller {
+  id                String   @id @default(uuid())
+  conceptId         BigInt   @unique // 概念店铺ID（唯一标识，使用BigInt支持大整数）
+  accountId         String   // 关联的领星账户ID
+  mid               Int?     // 概念市场ID
+  name              String?  // 概念店铺名称
+  sellerId          String?  // 亚马逊卖家记号
+  sellerAccountName String?  // 店铺账号名称
+  sellerAccountId   BigInt?  // 店铺账号ID（使用BigInt支持大整数）
+  region            String?  // 站点简称
+  country           String?  // 店铺所在国家名称
+  status            Int?     // 概念店铺状态：1 启用，2 禁用
+  data              Json?    // 完整的数据
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个概念店铺
+  account           LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([conceptId])
+  @@index([mid])
+  @@index([sellerId])
+  @@index([status])
+  @@index([accountId])
+  @@map("lingxing_concept_sellers")
+}
+
+// 领星ERP用户信息（基础数据）
+model LingXingAccountUser {
+  id            String   @id @default(uuid())
+  accountId     String   // 关联的领星账户ID
+  uid           Int      @unique // 用户ID（领星ERP的用户ID）
+  realname      String?  // 姓名
+  username      String?  // 用户名
+  mobile        String?  // 电话
+  email         String?  // 邮箱
+  loginNum      Int?     @default(0) // 登录次数
+  lastLoginTime String?  // 最近登录时间
+  lastLoginIp   String?  // 最近登录IP
+  status        Int?     // 状态：0 禁用，1 正常
+  createTime    String?  // 创建时间
+  role          String?  // 角色
+  seller        String?  // 店铺权限
+  isMaster      Int?     // 是否为主账号：0 否，1 是
+  data          Json?    // 完整的数据
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个用户
+  account       LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([uid])
+  @@index([accountId])
+  @@index([status])
+  @@index([isMaster])
+  @@map("lingxing_account_users")
+}
+
+// 领星ERP本地产品（产品管理数据）
+model LingXingLocalProduct {
+  id                    String   @id @default(uuid())
+  accountId             String   // 关联的领星账户ID
+  productId             Int      @unique // 本地产品id
+  cid                   Int?     // 类别id
+  categoryName          String?  // 类别
+  bid                   Int?     // 品牌id
+  brandName             String?  // 品牌
+  sku                   String?  // 本地产品SKU
+  openStatus            Int?     // 产品开启状态：0-停用，1-启用
+  skuIdentifier         String?  // SKU识别码
+  productName           String?  // 品名
+  picUrl                String?  @db.Text // 图片链接
+  psId                  Int?     // SPU唯一id
+  spu                   String?  // SPU
+  cgDelivery            Int?     // 采购：交期
+  cgTransportCosts      Decimal? @db.Decimal(10, 2) // 采购：运输成本
+  purchaseRemark        String?  @db.Text // 采购备注
+  cgPrice               Decimal? @db.Decimal(10, 4) // 采购：采购成本（人民币）
+  status                Int?     // 状态：0 停售，1 在售，2 开发中，3 清仓
+  statusText            String?  // 状态文本
+  isCombo               Int?     // 是否为组合产品：0 否，1 是
+  createTime            Int?     // 创建时间（时间戳）
+  updateTime            Int?     // 更新时间（时间戳）
+  productDeveloperUid   String?  // 开发人员id
+  productDeveloper      String?  // 开发人员名称
+  cgOptUid              String?  // 采购：采购员id
+  cgOptUsername         String?  // 采购：采购员名称
+  globalTags            Json?    // 产品标签信息
+  supplierQuote         Json?    // 供应商报价信息
+  customFields          Json?    // 自定义字段
+  attribute             Json?    // 产品属性
+  data                  Json?    // 完整的数据
+  productDetail         Json?    // 产品详细信息（来自 productInfo 接口）
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个产品
+  account               LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([productId])
+  @@index([accountId])
+  @@index([sku])
+  @@index([skuIdentifier])
+  @@index([status])
+  @@index([openStatus])
+  @@index([createTime])
+  @@index([updateTime])
+  @@map("lingxing_local_products")
+}
+
