@@ -146,6 +146,28 @@ model LingXingAccount {
   accountUsers  LingXingAccountUser[]
   // 关联的本地产品（一个账户下可以有多个产品）
   localProducts LingXingLocalProduct[]
+  // 关联的亚马逊订单（通过领星ERP获取）
+  amazonOrders LingXingAmazonOrder[]
+  // 关联的供应商（一个账户下可以有多个供应商）
+  suppliers LingXingSupplier[]
+  // 关联的采购方（一个账户下可以有多个采购方）
+  purchasers LingXingPurchaser[]
+  // 关联的采购计划（一个账户下可以有多个采购计划）
+  purchasePlans LingXingPurchasePlan[]
+  // 关联的采购单（一个账户下可以有多个采购单）
+  purchaseOrders LingXingPurchaseOrder[]
+  // 关联的采购退货单（一个账户下可以有多个采购退货单）
+  purchaseReturnOrders LingXingPurchaseReturnOrder[]
+  // 关联的采购变更单（一个账户下可以有多个采购变更单）
+  purchaseChangeOrders LingXingPurchaseChangeOrder[]
+  // 关联的物流渠道（一个账户下可以有多个物流渠道）
+  logisticsChannels LingXingLogisticsChannel[]
+  // 关联的头程物流商（一个账户下可以有多个物流商）
+  headLogisticsProviders LingXingHeadLogisticsProvider[]
+  // 关联的已启用自发货物流方式（一个账户下可以有多个物流方式）
+  usedLogisticsTypes LingXingUsedLogisticsType[]
+  // 关联的运输方式（一个账户下可以有多个运输方式）
+  transportMethods LingXingTransportMethod[]
   
   @@index([appId])
   @@index([isActive])
@@ -430,5 +452,699 @@ model LingXingLocalProduct {
   @@index([createTime])
   @@index([updateTime])
   @@map("lingxing_local_products")
+}
+
+// 领星ERP亚马逊订单（通过领星ERP获取的亚马逊订单数据）
+model LingXingAmazonOrder {
+  id                      String   @id @default(uuid())
+  accountId               String   // 关联的领星账户ID
+  amazonOrderId           String   @unique // 亚马逊订单号
+  sid                     Int?     // 店铺id
+  sellerName              String?  // 店铺名称
+  orderStatus             String?  // 订单状态
+  orderTotalAmount        Decimal? @db.Decimal(10, 2) // 订单金额
+  orderTotalCurrencyCode  String?  // 订单金额币种
+  fulfillmentChannel      String?  // 配送方式：AFN、MFN
+  postalCode              String?  // 邮编
+  isReturn                Int?     // 退款状态：0 未退款，1 退款中，2 退款完成
+  isMcfOrder              Int?     // 是否多渠道订单：0 否，1 是
+  isAssessed              Int?     // 是否推广订单：0 否，1 是
+  isReplacedOrder         Int?     // 是否换货订单：0 否，1 是
+  isReplacementOrder      Int?     // 是否已换货订单：0 否，1 是
+  isReturnOrder           Int?     // 是否退货订单：0 否，1 是
+  salesChannel            String?  // 销售渠道
+  trackingNumber          String?  // 物流运单号
+  refundAmount            Decimal? @db.Decimal(10, 2) // 退款金额
+  purchaseDateLocal       String?  // 订购时间【站点时间】
+  purchaseDateLocalUtc    String?  // 订购时间【UTC】
+  shipmentDate            String?  // 发货日期【亚马逊返回时间】
+  shipmentDateUtc         String?  // 发货日期【UTC】
+  shipmentDateLocal       String?  // 发货日期【站点时间】
+  lastUpdateDate          String?  // 订单更新时间【站点时间】
+  lastUpdateDateUtc       String?  // 订单更新时间【UTC】
+  postedDate              String?  // 付款时间【亚马逊返回时间】
+  postedDateUtc           String?  // 付款时间【UTC】
+  purchaseDate            String?  // 订购时间【亚马逊返回时间】
+  purchaseDateUtc         String?  // 订购时间【UTC】
+  earliestShipDate        String?  // 发货时限【亚马逊返回时间】
+  earliestShipDateUtc     String?  // 发货时限【UTC】
+  gmtModified             String?  // 订单修改时间
+  gmtModifiedUtc          String?  // 订单修改时间【UTC】
+  orderData               Json?    // 订单列表完整数据
+  orderDetail             Json?    // 订单详情完整数据
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个订单
+  account                 LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // 关联的订单项
+  orderItems              LingXingAmazonOrderItem[]
+  
+  @@index([amazonOrderId])
+  @@index([accountId])
+  @@index([sid])
+  @@index([orderStatus])
+  @@index([purchaseDateLocal])
+  @@map("lingxing_amazon_orders")
+}
+
+// 领星ERP亚马逊订单项
+model LingXingAmazonOrderItem {
+  id                      String   @id @default(uuid())
+  orderId                 String   // 关联的订单ID
+  asin                    String?  // ASIN
+  quantityOrdered         Int?     // 下单量
+  quantityShipped         Int?     // 已配送
+  sellerSku               String?  // MSKU
+  localSku                String?  // 本地SKU
+  localName               String?  // 本地品名
+  orderItemId             String?  // 订单商品编码
+  title                   String?  // 商品标题
+  productId               Int?     // 本地产品id
+  productName             String?  // 品名
+  picUrl                  String?  @db.Text // 图片链接
+  asinUrl                 String?  @db.Text // ASIN链接
+  itemPriceAmount         Decimal? @db.Decimal(10, 2) // 商品支付金额
+  itemTaxAmount           Decimal? @db.Decimal(10, 2) // 商品税
+  shippingPriceAmount     Decimal? @db.Decimal(10, 2) // 买家运费
+  shippingTaxAmount       Decimal? @db.Decimal(10, 2) // 商品运费税
+  giftWrapPriceAmount     Decimal? @db.Decimal(10, 2) // 礼品包装费
+  giftWrapTaxAmount       Decimal? @db.Decimal(10, 2) // 礼品包装税
+  shippingDiscountAmount  Decimal? @db.Decimal(10, 2) // 配送折扣
+  codFeeAmount            Decimal? @db.Decimal(10, 2) // COD服务费用
+  promotionIds            Json?    // 商品促销id
+  shippingDiscountTaxAmount Decimal? @db.Decimal(10, 2) // 配送折扣税
+  promotionDiscountAmount Decimal? @db.Decimal(10, 2) // 商品促销折扣
+  promotionDiscountTaxAmount Decimal? @db.Decimal(10, 2) // 商品促销折扣税
+  codFeeDiscountAmount    Decimal? @db.Decimal(10, 2) // COD服务费用折扣
+  giftMessageText         String?  @db.Text // 礼品信息
+  giftWrapLevel           String?  // 礼品包装级别
+  conditionNote           String?  @db.Text // 商品状况说明
+  conditionId             String?  // 商品状况
+  conditionSubtypeId      String?  // 商品子状况
+  scheduledDeliveryStartDate String? // 计划交货开始日期
+  scheduledDeliveryEndDate String? // 计划交货结束日期
+  priceDesignation        String?  // B2B价格
+  cgPrice                 Decimal? @db.Decimal(10, 2) // 采购成本
+  feeName                 String?  // 其他费名称
+  cgTransportCosts        Decimal? @db.Decimal(10, 2) // 头程费用
+  fbaShipmentAmount       Decimal? @db.Decimal(10, 2) // FBA发货费
+  commissionAmount        Decimal? @db.Decimal(10, 2) // 平台费
+  otherAmount             Decimal? @db.Decimal(10, 2) // 亚马逊收取的其他费用
+  feeCurrency             String?  // 其他费币种
+  feeIcon                 String?  // 其他费币种符号
+  feeCostAmount           Decimal? @db.Decimal(10, 2) // 自定义费用本金（店铺对应的币种）
+  feeCost                 Decimal? @db.Decimal(10, 2) // 自定义费用本金（fee_currency对应的币种）
+  salesPriceAmount        Decimal? @db.Decimal(10, 2) // 销售收益
+  unitPriceAmount         Decimal? @db.Decimal(10, 2) // 单价
+  taxAmount               Decimal? @db.Decimal(10, 2) // 税费
+  promotionAmount         Decimal? @db.Decimal(10, 2) // 促销费
+  profit                  Decimal? @db.Decimal(10, 2) // 毛利润
+  itemDiscount            Decimal? @db.Decimal(10, 2) // 商品折扣
+  customizedJson          Json?    // 订单定制化信息json
+  isSettled               Int?     // 商品已结算标识:0 未结算,1 已结算
+  itemData                Json?    // 订单项完整数据
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  
+  // 关联关系
+  order                   LingXingAmazonOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  @@unique([orderId, orderItemId])
+  @@index([orderId])
+  @@index([asin])
+  @@index([sellerSku])
+  @@index([localSku])
+  @@map("lingxing_amazon_order_items")
+}
+
+// 领星ERP供应商（采购管理数据）
+model LingXingSupplier {
+  id                      String   @id @default(uuid())
+  accountId               String   // 关联的领星账户ID
+  supplierId              Int      @unique // 系统供应商id
+  customerSupplierId      String?  // 客户供应商id【已停用】
+  supplierName            String?  // 供应商名称
+  supplierCode            String?  // 供应商编码
+  employees               Int?     // 规模：员工数
+  url                     String?  @db.Text // 供应商网址
+  contactPerson           String?  // 联系人
+  contactNumber           String?  // 联系电话
+  qq                      String?  // qq
+  email                   String?  // 邮箱
+  fax                     String?  // 传真
+  accountName             String?  // 户名
+  openBank                String?  // 开户行
+  bankCardNumber          String?  // 银行卡号
+  remark                  String?  @db.Text // 备注
+  purchaser               String?  // 跟进人
+  isDelete                Int?     // 是否已删除：0 否，1 是
+  addressFull             String?  @db.Text // 详细地址
+  paymentMethodText       String?  // 支付方式
+  pcName                  String?  // 采购合同名称
+  settlementMethodText    String?  // 结算方式
+  settlementDescription   String?  @db.Text // 结算描述
+  employeesText           String?  // 规模大小
+  levelText               String?  // 级别
+  creditCode              String?  // 统一社会信用代码
+  prepayPercent           String?  // 预付比例
+  paymentAccountGroup     Json?    // 收款账户
+  periodConfigKey         String?  // 结算账期
+  periodConfigText         String?  // 结算账期文本
+  wid                     Int?     // 仓库id
+  wName                   String?  // 仓库名称
+  templateId              String?  // 新采购合同模板id
+  templateName            String?  // 新采购合同模板名称
+  purchaserId             Int?     // 采购方id
+  purchaserIdText         String?  // 采购方
+  receiptWid              Int?     // 采购收货仓库id
+  receiptWidText          String?  // 采购收货仓库
+  supplierData            Json?    // 供应商完整数据
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个供应商
+  account                 LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([supplierId])
+  @@index([accountId])
+  @@index([supplierCode])
+  @@index([isDelete])
+  @@map("lingxing_suppliers")
+}
+
+// 领星ERP采购方（采购管理数据）
+model LingXingPurchaser {
+  id              String   @id @default(uuid())
+  accountId       String   // 关联的领星账户ID
+  purchaserId     Int      @unique // 采购方id
+  name            String?  // 采购方名称
+  address         String?  @db.Text // 地址
+  contactPhone    String?  // 联系方式
+  contacter       String?  // 联系人
+  email           String?  // 邮箱
+  purchaserData   Json?    // 采购方完整数据
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个采购方
+  account         LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([purchaserId])
+  @@index([accountId])
+  @@index([name])
+  @@map("lingxing_purchasers")
+}
+
+// 领星ERP采购计划（采购管理数据）
+model LingXingPurchasePlan {
+  id                    String   @id @default(uuid())
+  accountId             String   // 关联的领星账户ID
+  planSn                String   @unique // 采购计划编号
+  ppgSn                 String?  // 采购计划批次号
+  statusText            String?  // 状态说明
+  status                Int?     // 状态值
+  creatorRealName       String?  // 创建人名称
+  creatorUid            Int?     // 创建人id
+  createTime            String?  // 创建时间
+  file                  Json?    // 附件
+  planRemark            String?  @db.Text // 备注
+  picUrl                String?  @db.Text // 产品图片
+  spuName               String?  // 款名
+  spu                   String?  // SPU
+  productName           String?  // 品名
+  productId             BigInt?  // 商品id
+  sku                   String?  // SKU
+  attribute             Json?    // 属性
+  sid                   Float?   // 店铺id
+  sellerName            String?  // 店铺名称
+  marketplace           String?  // 国家
+  fnsku                 String?  // FNSKU
+  msku                  Json?    // MSKU
+  supplierId            Json?    // 供应商id（可能是对象或数字）
+  supplierName          String?  // 供应商名称
+  wid                   BigInt?  // 仓库id
+  warehouseName         String?  // 仓库名称
+  purchaserId           BigInt?  // 采购方id
+  purchaserName         String?  // 采购方名称
+  cgBoxPcs              Int?     // 单箱数量
+  quantityPlan          Int?     // 计划采购量
+  expectArriveTime      String?  // 期望到货时间
+  cgUid                 Int?     // 采购员id
+  cgOptUsername         String?  // 采购员名称
+  remark                String?  @db.Text // 产品备注
+  isCombo               Int?     // 是否为组合商品：0 否，1 是
+  isAux                 Int?     // 是否为辅料：0 否，1 是
+  isRelatedProcessPlan  Int?     // 是否关联了加工计划：0 否，1 是
+  groupId               Int?     // 分组id
+  planData              Json?    // 采购计划完整数据
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个采购计划
+  account               LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([planSn])
+  @@index([accountId])
+  @@index([productId])
+  @@index([sku])
+  @@index([status])
+  @@index([createTime])
+  @@map("lingxing_purchase_plans")
+}
+
+// 领星ERP采购单（采购管理数据）
+model LingXingPurchaseOrder {
+  id                    String   @id @default(uuid())
+  accountId             String   // 关联的领星账户ID
+  orderSn               String   @unique // 采购单号
+  customOrderSn         String?  // 自定义单号
+  supplierId            BigInt?  // 供应商id
+  supplierName          String?  // 供应商
+  optUid                BigInt?  // 采购员id
+  principalUids         Json?    // 单据负责人信息
+  auditorRealname       String?  // 审核人姓名
+  optRealname           String?  // 操作人姓名
+  lastRealname          String?  // 最后操作人姓名
+  createTime            String?  // 创建时间
+  orderTime             String?  // 下单时间
+  payment               Decimal? @db.Decimal(10, 2) // 应付货款（手工）
+  auditorUid            BigInt?  // 审核人员id
+  auditorTime           String?  // 审核时间
+  lastUid               BigInt?  // 最后操作人员id
+  lastTime              String?  // 最后操作时间
+  reason                String?  @db.Text // 作废原因
+  isTax                 Int?     // 是否含税：0 否，1 是
+  status                Int?     // 采购单状态
+  statusText            String?  // 状态说明
+  payStatusText         String?  // 支付状态说明
+  statusShipped         Int?     // 到货状态：1 未到货，2 部分到货，3 全部到货
+  statusShippedText     String?  // 到货状态说明
+  amountTotal           Decimal? @db.Decimal(10, 2) // 货物总价
+  totalPrice            Decimal? @db.Decimal(10, 2) // 总金额
+  icon                  String?  // 币种符号
+  payStatus             Int?     // 付款状态：0 未申请，1 已申请，2 部分付款，3 已付款
+  remark                String?  @db.Text // 备注
+  otherFee              Decimal? @db.Decimal(10, 2) // 其他费用
+  otherCurrency         String?  // 其他费用币种
+  feePartType           Int?     // 费用分摊方式：0 不分摊，1 按金额，2 按数量
+  shippingPrice         Decimal? @db.Decimal(10, 2) // 运费
+  shippingCurrency      String?  // 运费币种
+  purchaseCurrency      String?  // 采购币种
+  purchaseRate          Decimal? @db.Decimal(10, 4) // 采购汇率
+  quantityTotal         Decimal? @db.Decimal(10, 2) // 采购总量
+  wid                   BigInt?  // 仓库id
+  wareHouseName         String?  // 仓库名
+  wareHouseBakName      String?  // 仓库名(备份)
+  quantityEntry         Int?     // 入库量
+  quantityReal          Int?     // 实际采购量
+  quantityReceive       Int?     // 待到货量
+  updateTime             String?  // 采购单更新时间
+  purchaserId            BigInt?  // 采购方id
+  contactPerson          String?  // 联系人
+  contactNumber          String?  // 联系方式
+  settlementMethod       Int?     // 结算方式：7 现结，8 月结
+  settlementDescription  String?  @db.Text // 结算描述
+  purchaseType           String?  // 采购类型 1:普通采购；2:1688采购
+  purchaseTypeText       String?  // 采购类型文本
+  alibabaOrderSn         String?  // 1688订单号
+  subStatus              String?  // 1688订单状态
+  subStatusText          String?  // 1688订单状态文本
+  customFields           Json?    // 自定义字段
+  paymentMethod          BigInt?  // 支付方式
+  logisticsInfo          Json?    // 物流信息
+  orderData              Json?    // 采购单完整数据
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个采购单
+  account                LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // 关联的采购单项
+  orderItems             LingXingPurchaseOrderItem[]
+  
+  @@index([orderSn])
+  @@index([accountId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([createTime])
+  @@map("lingxing_purchase_orders")
+}
+
+// 领星ERP采购单项（采购单子项）
+model LingXingPurchaseOrderItem {
+  id                    String   @id @default(uuid())
+  orderId               String   // 关联的采购单ID
+  itemId                BigInt   @unique // 采购单子项id
+  wid                   BigInt?  // 仓库id
+  wareHouseName         String?  // 仓库名称
+  relationPurchasePlan  Json?    // 更多采购计划号
+  planSn                String?  // 采购计划号
+  productId             BigInt?  // 本地产品id
+  productName           String?  // 品名
+  sku                   String?  // SKU
+  fnsku                 String?  // FNSKU
+  sid                   String?  // 店铺id
+  model                 String?  // 型号
+  price                 Decimal? @db.Decimal(10, 4) // 含税单价
+  amount                Decimal? @db.Decimal(10, 2) // 价税合计
+  quantityPlan          Int?     // 计划采购量
+  quantityReal          Int?     // 实际采购量
+  quantityEntry         Int?     // 到货入库量
+  quantityReceive       Int?     // 待到货量
+  quantityReturn        Int?     // 退货数
+  quantityExchange      Int?     // 换货量
+  quantityQc            Int?     // 质检量
+  quantityQcPrepare      Int?     // 待质检量
+  expectArriveTime      String?  // 期待到货时间
+  remark                String?  @db.Text // 备注
+  casesNum              Int?     // 箱数
+  quantityPerCase       Int?     // 单箱数量
+  isDelete              Int?     // 是否删除：0 否，1 是
+  msku                  Json?    // MSKU
+  attribute             Json?    // 属性
+  taxRate               String?  // 税率
+  spu                   String?  // spu
+  spuName               String?  // 款名
+  customFields          Json?    // 自定义字段
+  itemData              Json?    // 采购单项完整数据
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系
+  order                 LingXingPurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  @@index([itemId])
+  @@index([orderId])
+  @@index([productId])
+  @@index([sku])
+  @@map("lingxing_purchase_order_items")
+}
+
+// 领星ERP采购退货单（采购管理数据）
+model LingXingPurchaseReturnOrder {
+  id                    String   @id @default(uuid())
+  accountId             String   // 关联的领星账户ID
+  orderSn               String   @unique // 退货单号
+  wid                   BigInt?  // 仓库id
+  createUid             BigInt?  // 创建人id
+  createRealname        String?  // 创建人名称
+  createTime            String?  // 创建时间
+  lastTime              String?  // 更新时间
+  buyerUid              BigInt?  // 采购员id
+  buyerRealname         String?  // 采购员名称
+  purchaseOrderSn       String?  // 采购单号
+  supplierId            BigInt?  // 供应商id
+  supplierName          String?  // 供应商名称
+  returnMethod          Int?     // 退货方式：1 退货扣款，2 退货补货
+  replenishMethod       Int?     // 补货方式：1 源单补货
+  receiptFundsOrderSn   String?  // 收款单号
+  status                Int?     // 状态
+  purchaseCurrency      String?  // 采购币种
+  purchaseCurrencyIcon  String?  // 采购币种符号
+  feePartType           Int?     // 费用分配方式：0 不分配，1 按金额，2 按数量
+  shippingCurrency      String?  // 运费币种
+  shippingPrice          Decimal? @db.Decimal(10, 2) // 退货运费
+  otherCurrency         String?  // 其他费用币种
+  otherFee              Decimal? @db.Decimal(10, 2) // 其他费用
+  returnReason          String?  @db.Text // 退货原因
+  returnAmountTotal     Decimal? @db.Decimal(10, 2) // 退货总金额
+  remark                String?  @db.Text // 单据备注
+  returnOrderData       Json?    // 采购退货单完整数据
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个采购退货单
+  account                LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // 关联的采购退货单项
+  returnOrderItems       LingXingPurchaseReturnOrderItem[]
+  
+  @@index([orderSn])
+  @@index([accountId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([createTime])
+  @@map("lingxing_purchase_return_orders")
+}
+
+// 领星ERP采购退货单项（采购退货单子项）
+model LingXingPurchaseReturnOrderItem {
+  id                    String   @id @default(uuid())
+  returnOrderId         String   // 关联的采购退货单ID
+  itemId                BigInt   @unique // 子项id
+  spuName               String?  // 款名
+  spu                   String?  // SPU
+  productName           String?  // 品名
+  sku                   String?  // SKU
+  fnsku                 String?  // FNSKU
+  msku                  Json?    // MSKU
+  attribute             Json?    // 属性
+  price                 Decimal? @db.Decimal(10, 4) // 含税单价
+  quantityReal          Int?     // 采购数量
+  returnGoodNum         Int?     // 良品退货量
+  returnBadNum          Int?     // 次品退货量
+  replenishNum          Int?     // 扣款数量
+  deductionAmount       Decimal? @db.Decimal(10, 2) // 退货金额
+  expectArriveTime      String?  // 预计到货时间
+  remark                String?  @db.Text // 备注
+  sellerId              String?  // 店铺id
+  itemData              Json?    // 采购退货单项完整数据
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系
+  returnOrder           LingXingPurchaseReturnOrder @relation(fields: [returnOrderId], references: [id], onDelete: Cascade)
+  
+  @@index([itemId])
+  @@index([returnOrderId])
+  @@index([sku])
+  @@map("lingxing_purchase_return_order_items")
+}
+
+// 领星ERP采购变更单（采购管理数据）
+model LingXingPurchaseChangeOrder {
+  id                    String   @id @default(uuid())
+  accountId             String   // 关联的领星账户ID
+  orderSn               String   @unique // 变更单号
+  createTime            String?  // 创建时间
+  supplierName          String?  // 供应商
+  oldSupplierName       String?  // 旧供应商
+  wid                   BigInt?  // 仓库id
+  oldWid                BigInt?  // 旧仓库id
+  wareHouseName         String?  // 仓库
+  oldWareHouseName      String?  // 旧仓库
+  createRealname        String?  // 创建人
+  optRealname           String?  // 采购员
+  oldOptRealname        String?  // 旧采购员
+  remark                String?  @db.Text // 备注
+  status                Int?     // 状态标识码：-1 已驳回，0 待审核，1 已处理
+  statusText            String?  // 状态文本
+  icon                  String?  // 货币符号
+  amount                Decimal? @db.Decimal(10, 2) // 金额
+  oldAmount             Decimal? @db.Decimal(10, 2) // 旧金额
+  changeOrderData       Json?    // 采购变更单完整数据
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个采购变更单
+  account                LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // 关联的采购变更单项
+  changeOrderItems       LingXingPurchaseChangeOrderItem[]
+  
+  @@index([orderSn])
+  @@index([accountId])
+  @@index([status])
+  @@index([createTime])
+  @@map("lingxing_purchase_change_orders")
+}
+
+// 领星ERP采购变更单项（采购变更单子项）
+model LingXingPurchaseChangeOrderItem {
+  id                    String   @id @default(uuid())
+  changeOrderId         String   // 关联的采购变更单ID
+  productId             String   // 产品id（字符串类型）
+  sku                   String   // SKU
+  wid                   Json?    // 仓库id（可能是数组、BigInt或JSON）
+  oldWid                Json?    // 旧仓库id（可能是数组、BigInt或JSON）
+  wareHouseName         String?  // 仓库
+  oldWareHouseName      String?  // 旧仓库
+  spu                   String?  // spu
+  spuName               String?  // spu名称
+  productName           String?  // 品名
+  attribute             Json?    // 属性信息
+  fnsku                 String?  // FNSKU
+  price                 Decimal? @db.Decimal(10, 4) // 含税单价
+  oldPrice              Decimal? @db.Decimal(10, 4) // 旧含税单价
+  priceWithoutTax       Decimal? @db.Decimal(10, 4) // 不含税单价
+  oldPriceWithoutTax    Decimal? @db.Decimal(10, 4) // 旧不含税单价
+  taxRate               Decimal? @db.Decimal(10, 2) // 税率
+  oldTaxRate            Decimal? @db.Decimal(10, 2) // 旧税率
+  quantityReal          Decimal? @db.Decimal(10, 2) // 实际采购量
+  oldQuantityReal       Decimal? @db.Decimal(10, 2) // 旧实际采购量
+  amount                Decimal? @db.Decimal(10, 2) // 金额
+  oldAmount             Decimal? @db.Decimal(10, 2) // 旧金额
+  seller                Json?    // 店铺列表
+  msku                  Json?    // msku
+  isTax                 Int?     // 是否含税
+  isAux                 Int?     // 是否辅料
+  expectArriveTime      String?  // 预计到货时间
+  oldExpectArriveTime   String?  // 原预计到货时间
+  itemData              Json?    // 采购变更单项完整数据
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系
+  changeOrder           LingXingPurchaseChangeOrder @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+  
+  @@unique([changeOrderId, productId, sku])
+  @@index([changeOrderId])
+  @@index([productId])
+  @@index([sku])
+  @@map("lingxing_purchase_change_order_items")
+}
+
+// 领星ERP物流渠道（头程物流数据）
+model LingXingLogisticsChannel {
+  id                    String   @id @default(uuid())
+  accountId             String   // 关联的领星账户ID
+  channelId             BigInt   @unique // 物流渠道id（对应ERP页面"物流方案代码"）
+  channelName           String?  // 物流渠道
+  methodId              String?  // 运输方式id
+  methodName            String?  // 运输方式名称
+  billingType           Int?     // 计费类型：0 计费重，1 体积
+  volumeCalcParam       String?  // 材积计算参数
+  zipCode               String?  // 邮编
+  validPeriod           Int?     // 时效天数
+  remark                String?  @db.Text // 备注
+  enabled               Int?     // 状态：0 停用、1 启用
+  lastModifyUid         BigInt?  // 最后更新数据用户id
+  gmtModified           String?  // 更新时间
+  providerId            String?  // 所属头程物流商id
+  providerName          String?  // 所属头程物流商名称
+  freight               Json?    // 运费规则
+  sendPlaceCodes        Json?    // 提货地代码数组
+  receiveCountryCodes   Json?    // 目的国家二字码数组
+  isIncludeTax          Int?     // 是否包税：0 否，1 是
+  isPointsBehind        Int?     // 是否分抛：0 否，1 是
+  pointsBehindCoeffient Decimal? @db.Decimal(10, 2) // 分抛系数，不带%
+  channelData           Json?    // 物流渠道完整数据
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个物流渠道
+  account                LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([channelId])
+  @@index([accountId])
+  @@index([enabled])
+  @@index([gmtModified])
+  @@map("lingxing_logistics_channels")
+}
+
+// 领星ERP头程物流商（物流数据）
+model LingXingHeadLogisticsProvider {
+  id                    String   @id @default(uuid())
+  accountId             String   // 关联的领星账户ID
+  providerId            String   @unique // 物流商id
+  name                  String?  // 物流商名
+  code                  String?  // 物流商代码
+  enabled               Int?     // 是否启用 0禁用 1 启用
+  logisticsType         Int?     // 类型：0 API物流，1 自定义物流，2 第三方仓物流，3 头程物流，4 平台物流
+  isAuth                Int?     // 是否api对接：0 否，1 是
+  supplierCode           String?  // 授权方code
+  supplierName          String?  // 授权方
+  status                Int?     // 授权状态：0 未授权，1 已授权
+  remark                String?  @db.Text // 备注
+  payMethod             Int?     // 结算方式：1-现结, 2-月结
+  contactName           String?  // 联系人
+  contactPhone          String?  // 联系电话
+  creatorId             BigInt?  // 创建人id
+  creatorName           String?  // 创建人名
+  createdAt             String?  // 创建时间，ISO格式
+  providerData          Json?    // 物流商完整数据
+  createdAtDb           DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个物流商
+  account                LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([providerId])
+  @@index([accountId])
+  @@index([enabled])
+  @@index([isAuth])
+  @@index([payMethod])
+  @@map("lingxing_head_logistics_providers")
+}
+
+// 领星ERP已启用的自发货物流方式（物流数据）
+model LingXingUsedLogisticsType {
+  id                      String   @id @default(uuid())
+  accountId               String   // 关联的领星账户ID
+  typeId                  String   // 物流方式id
+  providerType            Int      // 物流商类型：0 API物流，1 自定义物流，2 海外仓物流，4 平台物流
+  name                    String?  // 物流方式名称
+  code                    String?  // 物流方式代码
+  isUsed                  Int?     // 物流渠道是否启用：0 停用，1 启用
+  logisticsProviderId     String?  // 物流商id
+  logisticsProviderName   String?  // 物流商名称
+  providerIsUsed          Int?     // 物流商是否启用：0 停用，1 启用
+  feeTemplateId           BigInt?  // 费用模板id
+  updatedAt               String?  // 更新时间，ISO格式
+  warehouseType           Int?     // 仓库类型
+  supplierId              BigInt?  // 供应商id
+  supplierCode            String?  // 供应商代码
+  isPlatformProvider      Int?     // 是否平台物流商：0 否，1 是
+  isSupportDomesticProvider Boolean? // 是否支持国内物流商
+  isNeedMarking           Boolean? // 是否需要标记
+  isCombineChannel        Boolean? // 是否合并渠道
+  orderType               Int?     // 订单类型
+  billingType             Int?     // 计费类型
+  volumeParam             Int?     // 体积参数
+  wpCode                  String?  // 仓库代码
+  wid                     BigInt?  // 仓库id
+  logisticsTypeData       Json?    // 物流方式完整数据
+  createdAtDb             DateTime @default(now())
+  updatedAtDb             DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个物流方式
+  account                 LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, typeId], name: "accountId_typeId")
+  @@index([typeId])
+  @@index([accountId])
+  @@index([providerType])
+  @@index([isUsed])
+  @@index([logisticsProviderId])
+  @@map("lingxing_used_logistics_types")
+}
+
+// 领星ERP运输方式（业务配置数据）
+model LingXingTransportMethod {
+  id                  String   @id @default(uuid())
+  accountId           String   // 关联的领星账户ID
+  methodId            String   // 运输方式id
+  code                String?  // 序号
+  name                String?  // 运输方式名称
+  isSystem            Boolean? // 是否为系统运输方式：true 是，false 否
+  enabled             Int?     // 启动状态：0 停用，1 启用
+  remark              String?  @db.Text // 备注
+  creatorId           BigInt?  // 创建人id
+  creatorName         String?  // 创建人名称
+  updaterId           BigInt?  // 最后编辑人id
+  updaterName         String?  // 最后编辑人名称
+  createdAt           String?  // 创建时间，ISO格式
+  updatedAt           String?  // 更新时间，ISO格式
+  transportMethodData Json?    // 运输方式完整数据
+  createdAtDb         DateTime @default(now())
+  updatedAtDb         DateTime @updatedAt
+  
+  // 关联关系：一个领星账户可以有多个运输方式
+  account             LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, methodId], name: "accountId_methodId")
+  @@index([methodId])
+  @@index([accountId])
+  @@index([enabled])
+  @@index([isSystem])
+  @@map("lingxing_transport_methods")
 }
 
