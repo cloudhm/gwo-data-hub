@@ -565,6 +565,11 @@ class LingXingSalesService extends LingXingApiClient {
 
       console.log(`所有订单列表获取完成，共 ${allOrders.length} 个订单`);
 
+      // 保存订单列表到数据库
+      if (allOrders && allOrders.length > 0) {
+        await this.saveAmazonOrders(accountId, allOrders);
+      }
+
       const stats = {
         totalOrders: allOrders.length,
         pagesFetched: currentPage,

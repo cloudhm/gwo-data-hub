@@ -1115,6 +1115,11 @@ class LingXingPurchaseService extends LingXingApiClient {
 
       console.log(`所有供应商列表获取完成，共 ${allSuppliers.length} 个供应商`);
 
+      // 保存到数据库
+      if (allSuppliers && allSuppliers.length > 0) {
+        await this.saveSuppliers(accountId, allSuppliers);
+      }
+
       return {
         suppliers: allSuppliers,
         total: allSuppliers.length,
@@ -1198,6 +1203,11 @@ class LingXingPurchaseService extends LingXingApiClient {
       }
 
       console.log(`所有采购方列表获取完成，共 ${allPurchasers.length} 个采购方`);
+
+      // 保存到数据库
+      if (allPurchasers && allPurchasers.length > 0) {
+        await this.savePurchasers(accountId, allPurchasers);
+      }
 
       return {
         purchasers: allPurchasers,

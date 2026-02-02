@@ -952,6 +952,11 @@ class LingXingProductService extends LingXingApiClient {
 
       console.log(`所有产品列表获取完成，共 ${allProducts.length} 个产品`);
 
+      // 保存产品列表到数据库
+      if (allProducts && allProducts.length > 0) {
+        await this.saveLocalProducts(accountId, allProducts);
+      }
+
       const stats = {
         totalProducts: allProducts.length,
         pagesFetched: currentPage,
