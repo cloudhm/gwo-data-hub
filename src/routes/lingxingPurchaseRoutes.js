@@ -443,4 +443,188 @@ async function lingxingPurchaseRoutes(fastify, options) {
 
   /**
    * 查询采购变更单列表
-   
+   * POST /api/lingxing/purchase/purchase-change-orders/:accountId
+   * Body: {
+   *   offset: 0,                           // 分页偏移量（必填）
+   *   length: 20,                          // 分页长度（必填）
+   *   search_field_time: "create_time",    // 筛选时间类型（可选）：create_time/update_time，默认create_time
+   *   start_date: "2024-08-02",            // 开始时间（可选）
+   *   end_date: "2024-08-02",              // 结束时间（可选）
+   *   multi_search_field: "purchase_order_sn",  // 搜索单号字段（可选）：order_sn/purchase_order_sn
+   *   multi_search_value: ["test-01"]      // 批量搜索的单号值数组（可选）
+   * }
+   */
+  fastify.post('/purchase-change-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingPurchaseService.getPurchaseChangeOrderList(accountId, params);
+
+      return {
+        success: true,
+        message: '获取采购变更单列表成功',
+        data: result.data,
+        total: result.total
+      };
+    } catch (error) {
+      fastify.log.error('获取采购变更单列表错误:', error);
+      
+      // 处理参数验证错误
+      if (error.message && error.message.includes('必填')) {
+        return reply.code(400).send({
+          success: false,
+          message: error.message || '参数错误'
+        });
+      }
+
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取采购变更单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 自动拉取所有采购变更单列表
+   * POST /api/lingxing/purchase/fetch-all-purchase-change-orders/:accountId
+   * Body: {
+   *   // 采购变更单列表查询参数（可选）
+   *   search_field_time: "create_time",    // 筛选时间类型（可选）：create_time/update_time
+   *   start_date: "2024-08-02",            // 开始时间（可选）
+   *   end_date: "2024-08-02",              // 结束时间（可选）
+   *   multi_search_field: "purchase_order_sn",  // 搜索单号字段（可选）
+   *   multi_search_value: ["test-01"],     // 批量搜索的单号值数组（可选）
+   *   
+   *   // 选项（可选）
+   *   options: {
+   *     pageSize: 500,               // 每页大小（可选，默认500）
+   *     delayBetweenPages: 500,      // 分页之间延迟（毫秒，可选，默认500）
+   *   }
+   * }
+   */
+  fastify.post('/fetch-all-purchase-change-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { options, ...listParams } = body;
+
+    try {
+      const result = await lingxingPurchaseService.fetchAllPurchaseChangeOrders(accountId, listParams, options || {});
+
+      return {
+        success: true,
+        message: '自动拉取所有采购变更单列表成功',
+        data: result.changeOrders,
+        total: result.total,
+        stats: result.stats
+      };
+    } catch (error) {
+      fastify.log.error('自动拉取所有采购变更单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '自动拉取所有采购变更单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 查询收货单列表
+   * POST /api/lingxing/purchase/receipt-orders/:accountId
+   * Body: {
+   *   date_type: 1,                      // 查询时间类型（可选）：1 预计到货时间，2 收货时间，3 创建时间，4 更新时间
+   *   start_date: "2024-07-29",          // 开始时间，格式：Y-m-d 或 Y-m-d H:i:s（可选）
+   *   end_date: "2024-07-29",            // 结束时间，格式：Y-m-d 或 Y-m-d H:i:s（可选）
+   *   order_sns: "CR240729025,CR240729013", // 收货单号，多个使用英文逗号分隔（可选）
+   *   status: 40,                        // 状态（可选）：10 待收货，40 已完成
+   *   wid: "1,2",                        // 仓库id，多个使用英文逗号分隔（可选）
+   *   order_type: 1,                     // 收货类型（可选）：1 采购订单，2 委外订单
+   *   qc_status: "0,1,2",                // 质检状态，多个使用英文逗号分隔（可选）：0 未质检，1 部分质检，2 完成质检
+   *   offset: 0,                         // 分页偏移量（可选，默认0）
+   *   length: 20                         // 分页长度（可选，默认200，上限500）
+   * }
+   */
+  fastify.post('/receipt-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingPurchaseService.getPurchaseReceiptOrderList(accountId, params);
+
+      return {
+        success: true,
+        message: '获取收货单列表成功',
+        data: result.data,
+        total: result.total
+      };
+    } catch (error) {
+      fastify.log.error('获取收货单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取收货单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 自动拉取所有收货单列表
+   * POST /api/lingxing/purchase/fetch-all-receipt-orders/:accountId
+   * Body: {
+   *   // 筛选参数（可选）
+   *   date_type: 1,                      // 查询时间类型（可选）
+   *   start_date: "2024-07-29",          // 开始时间（可选）
+   *   end_date: "2024-07-29",            // 结束时间（可选）
+   *   order_sns: "CR240729025",          // 收货单号（可选）
+   *   status: 40,                        // 状态（可选）
+   *   wid: "1,2",                        // 仓库id（可选）
+   *   order_type: 1,                     // 收货类型（可选）
+   *   qc_status: "0,1,2",                // 质检状态（可选）
+   *   
+   *   // 选项（可选）
+   *   options: {
+   *     pageSize: 500,                   // 每页大小（可选，默认500，最大500）
+   *     delayBetweenPages: 500,           // 分页之间延迟（毫秒，可选，默认500）
+   *   }
+   * }
+   */
+  fastify.post('/fetch-all-receipt-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { options, ...filterParams } = body;
+
+    try {
+      const result = await lingxingPurchaseService.fetchAllPurchaseReceiptOrders(accountId, filterParams, options || {});
+
+      return {
+        success: true,
+        message: '自动拉取所有收货单列表成功',
+        data: result.receiptOrderList,
+        total: result.total,
+        stats: result.stats
+      };
+    } catch (error) {
+      fastify.log.error('自动拉取所有收货单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '自动拉取所有收货单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+}
+
+export default lingxingPurchaseRoutes;
+
