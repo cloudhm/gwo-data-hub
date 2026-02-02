@@ -1,4 +1,4 @@
-import { AMAZON_MARKETPLACES } from '../../utils/amazon.js';
+import { AMAZON_MARKETPLACES } from '../utils/amazon.js';
 import prisma from '../config/database.js';
 /**
  * 亚马逊路由插件
