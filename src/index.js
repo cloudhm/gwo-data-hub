@@ -17,33 +17,35 @@ import lingxingPurchaseRoutes from './routes/lingxingPurchaseRoutes.js';
 console.log('[9] lingxingPurchaseRoutes 导入完成');
 import lingxingLogisticsRoutes from './routes/lingxingLogisticsRoutes.js';
 console.log('[10] lingxingLogisticsRoutes 导入完成');
+import lingxingWarehouseRoutes from './routes/lingxingWarehouseRoutes.js';
+console.log('[11] lingxingWarehouseRoutes 导入完成');
 import accountRoutes from './routes/accountRoutes.js';
-console.log('[11] accountRoutes 导入完成');
+console.log('[12] accountRoutes 导入完成');
 
 // 加载环境变量
-console.log('[12] 加载环境变量...');
+console.log('[13] 加载环境变量...');
 dotenv.config();
-console.log('[13] 环境变量加载完成');
+console.log('[14] 环境变量加载完成');
 
 const PORT = process.env.PORT || 3000;
-console.log(`[14] 端口设置为: ${PORT}`);
+console.log(`[15] 端口设置为: ${PORT}`);
 
 // 启动服务器
 const start = async () => {
-  console.log('[15] 开始创建 Fastify 实例...');
+  console.log('[16] 开始创建 Fastify 实例...');
   const fastify = Fastify({
     logger: process.env.NODE_ENV === 'development'
     // logger: true
   });
-  console.log('[16] Fastify 实例创建完成');
+  console.log('[17] Fastify 实例创建完成');
 
   try {
-    console.log('[17] 开始注册 CORS 插件...');
+    console.log('[18] 开始注册 CORS 插件...');
     // 注册 CORS 插件
     await fastify.register(import('@fastify/cors'), {
       origin: true
     });
-    console.log('[18] CORS 插件注册完成');
+    console.log('[19] CORS 插件注册完成');
 
     // 健康检查
     fastify.get('/health', async (request, reply) => {
@@ -55,23 +57,25 @@ const start = async () => {
     });
 
     // 注册路由
-    console.log('[19] 开始注册路由...');
+    console.log('[20] 开始注册路由...');
     await fastify.register(amazonRoutes, { prefix: '/api/amazon' });
-    console.log('[20] amazonRoutes 注册完成');
+    console.log('[21] amazonRoutes 注册完成');
     await fastify.register(lingxingRoutes, { prefix: '/api/lingxing' });
-    console.log('[21] lingxingRoutes 注册完成');
+    console.log('[22] lingxingRoutes 注册完成');
     await fastify.register(lingxingBasicRoutes, { prefix: '/api/lingxing/basic' });
-    console.log('[22] lingxingBasicRoutes 注册完成');
+    console.log('[23] lingxingBasicRoutes 注册完成');
     await fastify.register(lingxingProductRoutes, { prefix: '/api/lingxing/products' });
-    console.log('[23] lingxingProductRoutes 注册完成');
+    console.log('[24] lingxingProductRoutes 注册完成');
     await fastify.register(lingxingSalesRoutes, { prefix: '/api/lingxing/sales' });
-    console.log('[24] lingxingSalesRoutes 注册完成');
+    console.log('[25] lingxingSalesRoutes 注册完成');
     await fastify.register(lingxingPurchaseRoutes, { prefix: '/api/lingxing/purchase' });
-    console.log('[25] lingxingPurchaseRoutes 注册完成');
+    console.log('[26] lingxingPurchaseRoutes 注册完成');
     await fastify.register(lingxingLogisticsRoutes, { prefix: '/api/lingxing/logistics' });
-    console.log('[26] lingxingLogisticsRoutes 注册完成');
+    console.log('[27] lingxingLogisticsRoutes 注册完成');
+    await fastify.register(lingxingWarehouseRoutes, { prefix: '/api/lingxing/warehouse' });
+    console.log('[28] lingxingWarehouseRoutes 注册完成');
     await fastify.register(accountRoutes, { prefix: '/api/accounts' });
-    console.log('[27] accountRoutes 注册完成');
+    console.log('[29] accountRoutes 注册完成');
 
     // 404处理
     fastify.setNotFoundHandler(async (request, reply) => {
@@ -91,9 +95,9 @@ const start = async () => {
     });
 
     // 启动服务器
-    console.log(`[28] 开始监听端口 ${PORT}...`);
+    console.log(`[30] 开始监听端口 ${PORT}...`);
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`[29] 服务器启动成功！`);
+    console.log(`[31] 服务器启动成功！`);
     console.log(`🚀 服务器运行在端口 ${PORT}`);
     console.log(`📊 健康检查: http://localhost:${PORT}/health`);
     console.log(`📚 API文档:`);
@@ -104,6 +108,7 @@ const start = async () => {
     console.log(`   - 领星销售管理: http://localhost:${PORT}/api/lingxing/sales`);
     console.log(`   - 领星采购管理: http://localhost:${PORT}/api/lingxing/purchase`);
     console.log(`   - 领星物流管理: http://localhost:${PORT}/api/lingxing/logistics`);
+    console.log(`   - 领星仓库管理: http://localhost:${PORT}/api/lingxing/warehouse`);
     console.log(`   - 账户管理: http://localhost:${PORT}/api/accounts`);
   } catch (err) {
     console.error('启动服务器失败:', err);
@@ -112,7 +117,7 @@ const start = async () => {
   }
 };
 
-console.log('[28] 调用 start() 函数...');
+console.log('[32] 调用 start() 函数...');
 start().catch(err => {
   console.error('[ERROR] start() 函数执行失败:', err);
   process.exit(1);

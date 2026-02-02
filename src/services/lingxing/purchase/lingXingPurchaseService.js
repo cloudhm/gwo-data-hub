@@ -1877,6 +1877,186 @@ class LingXingPurchaseService extends LingXingApiClient {
       throw error;
     }
   }
+
+  /**
+   * 查询收货单列表
+   * API: POST /erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数（所有参数都是可选的）
+   *   - date_type: 查询时间类型（可选）：1 预计到货时间，2 收货时间，3 创建时间，4 更新时间
+   *   - start_date: 开始时间，格式：Y-m-d 或 Y-m-d H:i:s（可选）
+   *   - end_date: 结束时间，格式：Y-m-d 或 Y-m-d H:i:s（可选）
+   *   - order_sns: 收货单号，多个使用英文逗号分隔（可选）
+   *   - status: 状态（可选）：10 待收货，40 已完成
+   *   - wid: 仓库id，多个使用英文逗号分隔（可选）
+   *   - order_type: 收货类型（可选）：1 采购订单，2 委外订单
+   *   - qc_status: 质检状态，多个使用英文逗号分隔（可选）：0 未质检，1 部分质检，2 完成质检
+   *   - offset: 分页偏移量（可选，默认0）
+   *   - length: 分页长度（可选，默认200，上限500）
+   * @returns {Promise<Object>} 收货单列表数据 { data: { total: 0, list: [] } }
+   */
+  async getPurchaseReceiptOrderList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 构建请求参数（所有参数都是可选的）
+      const requestParams = {};
+      if (params.date_type !== undefined) {
+        requestParams.date_type = params.date_type;
+      }
+      if (params.start_date !== undefined) {
+        requestParams.start_date = params.start_date;
+      }
+      if (params.end_date !== undefined) {
+        requestParams.end_date = params.end_date;
+      }
+      if (params.order_sns !== undefined) {
+        requestParams.order_sns = params.order_sns;
+      }
+      if (params.status !== undefined) {
+        requestParams.status = params.status;
+      }
+      if (params.wid !== undefined) {
+        requestParams.wid = params.wid;
+      }
+      if (params.order_type !== undefined) {
+        requestParams.order_type = params.order_type;
+      }
+      if (params.qc_status !== undefined) {
+        requestParams.qc_status = params.qc_status;
+      }
+      if (params.offset !== undefined) {
+        requestParams.offset = params.offset;
+      }
+      if (params.length !== undefined) {
+        // 确保 length 不超过 500
+        requestParams.length = Math.min(params.length, 500);
+      }
+
+      // 调用API获取收货单列表（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取收货单列表失败');
+      }
+
+      // 注意：这个接口返回的数据结构是 { data: { total: 2, list: [...] } }
+      const responseData = response.data || {};
+      const receiptOrderList = responseData.list || [];
+      const total = responseData.total || response.total || 0;
+
+      return {
+        data: receiptOrderList,
+        total: total
+      };
+    } catch (error) {
+      console.error('获取收货单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 自动拉取所有收货单列表（自动处理分页）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} filterParams - 筛选参数（可选）
+   *   - date_type: 查询时间类型（可选）
+   *   - start_date: 开始时间（可选）
+   *   - end_date: 结束时间（可选）
+   *   - order_sns: 收货单号（可选）
+   *   - status: 状态（可选）
+   *   - wid: 仓库id（可选）
+   *   - order_type: 收货类型（可选）
+   *   - qc_status: 质检状态（可选）
+   * @param {Object} options - 选项
+   *   - pageSize: 每页大小（默认500，最大500）
+   *   - delayBetweenPages: 分页之间的延迟时间（毫秒，默认500）
+   *   - onProgress: 进度回调函数 (currentPage, totalPages, currentCount, totalCount) => void
+   * @returns {Promise<Object>} { receiptOrderList: [], total: 0, stats: {} }
+   */
+  async fetchAllPurchaseReceiptOrders(accountId, filterParams = {}, options = {}) {
+    const {
+      pageSize = 500,
+      delayBetweenPages = 500,
+      onProgress = null
+    } = options;
+
+    // 确保 pageSize 不超过 500
+    const actualPageSize = Math.min(pageSize, 500);
+
+    try {
+      console.log('开始自动拉取所有收货单列表...');
+
+      const allReceiptOrderList = [];
+      let currentOffset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`正在获取收货单列表（offset: ${currentOffset}, length: ${actualPageSize}）...`);
+
+        try {
+          const pageResult = await this.getPurchaseReceiptOrderList(accountId, {
+            ...filterParams,
+            offset: currentOffset,
+            length: actualPageSize
+          });
+
+          const pageReceiptOrderList = pageResult.data || [];
+          const pageTotal = pageResult.total || 0;
+
+          if (currentOffset === 0) {
+            totalCount = pageTotal;
+            console.log(`总共需要获取 ${totalCount} 个收货单，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
+          }
+
+          allReceiptOrderList.push(...pageReceiptOrderList);
+          console.log(`获取完成，本页 ${pageReceiptOrderList.length} 个收货单，累计 ${allReceiptOrderList.length} 个收货单`);
+
+          if (onProgress) {
+            onProgress(Math.floor(currentOffset / actualPageSize) + 1, Math.ceil(totalCount / actualPageSize), allReceiptOrderList.length, totalCount);
+          }
+
+          if (pageReceiptOrderList.length < actualPageSize || allReceiptOrderList.length >= totalCount) {
+            hasMore = false;
+          } else {
+            currentOffset += actualPageSize;
+            if (delayBetweenPages > 0) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+            }
+          }
+        } catch (error) {
+          console.error(`获取收货单列表失败:`, error.message);
+          if (allReceiptOrderList.length === 0) {
+            throw error;
+          }
+          hasMore = false;
+        }
+      }
+
+      console.log(`所有收货单列表获取完成，共 ${allReceiptOrderList.length} 个收货单`);
+
+      return {
+        receiptOrderList: allReceiptOrderList,
+        total: allReceiptOrderList.length,
+        stats: {
+          totalReceiptOrders: allReceiptOrderList.length,
+          pagesFetched: Math.floor(currentOffset / actualPageSize) + 1
+        }
+      };
+    } catch (error) {
+      console.error('自动拉取所有收货单列表失败:', error.message);
+      throw error;
+    }
+  }
 }
 
 export default new LingXingPurchaseService();
