@@ -26,10 +26,10 @@ npm run prisma:push
 
 echo "[Deploy] 5/5 PM2 重启..."
 if pm2 list | grep -q "gwo-data-hub"; then
-  pm2 reload ecosystem.config.js $ENV_ARG
+  pm2 reload ecosystem.config.cjs $ENV_ARG
   echo "[Deploy] 完成，已零停机重载。"
 else
-  pm2 start ecosystem.config.js $ENV_ARG
+  pm2 start ecosystem.config.cjs $ENV_ARG
   echo "[Deploy] 完成，已首次启动。"
 fi
 

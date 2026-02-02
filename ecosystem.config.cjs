@@ -1,7 +1,7 @@
 /**
  * PM2 进程管理配置 - gwo-data-hub 数据中台服务
- * 部署: pm2 start ecosystem.config.js
- * 重启: pm2 reload ecosystem.config.js
+ * 部署: pm2 start ecosystem.config.cjs
+ * 重启: pm2 reload ecosystem.config.cjs
  * 查看: pm2 status / pm2 logs
  */
 module.exports = {
