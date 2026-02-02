@@ -4,6 +4,16 @@ import prisma from '../config/database.js';
  * 亚马逊路由插件
  */
 async function amazonRoutes(fastify, options) {
+
+    fastify.get('/auth-url', async (req, res) => {
+        const { state, redirect_uri } = req.query;
+        const clientId = process.env.AMAZON_APPLICATION_ID;
+        const redirectUri = redirect_uri || process.env.AMAZON_REDIRECT_URI;
+        const authUrl = `https://sellercentral.amazon.com/apps/authorize/consent?application_id=${clientId}&version=beta&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+        return { url: authUrl };
+      });
+
+
     fastify.get('/callback', {}, async (req, res) => {
         const { state, selling_partner_id, spapi_oauth_code } = req.query;
 
