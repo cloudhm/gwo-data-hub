@@ -1,4 +1,4 @@
-import lingxingSalesService from '../services/lingxing/sales/lingXingSalesService.js';
+import lingxingSalesService from '../../services/lingxing/sales/lingXingSalesService.js';
 
 /**
  * 领星ERP销售路由插件

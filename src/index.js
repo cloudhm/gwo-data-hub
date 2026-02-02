@@ -5,22 +5,24 @@ import dotenv from 'dotenv';
 console.log('[3] dotenv 导入完成');
 import amazonRoutes from './routes/amazonRoutes.js';
 console.log('[4] amazonRoutes 导入完成');
-import lingxingRoutes from './routes/lingxingRoutes.js';
+import lingxingRoutes from './routes/lingxing/lingxingRoutes.js';
 console.log('[5] lingxingRoutes 导入完成');
-import lingxingBasicRoutes from './routes/lingxingBasicRoutes.js';
+import lingxingBasicRoutes from './routes/lingxing/lingxingBasicRoutes.js';
 console.log('[6] lingxingBasicRoutes 导入完成');
-import lingxingProductRoutes from './routes/lingxingProductRoutes.js';
+import lingxingProductRoutes from './routes/lingxing/lingxingProductRoutes.js';
 console.log('[7] lingxingProductRoutes 导入完成');
-import lingxingSalesRoutes from './routes/lingxingSalesRoutes.js';
+import lingxingSalesRoutes from './routes/lingxing/lingxingSalesRoutes.js';
 console.log('[8] lingxingSalesRoutes 导入完成');
-import lingxingPurchaseRoutes from './routes/lingxingPurchaseRoutes.js';
+import lingxingPurchaseRoutes from './routes/lingxing/lingxingPurchaseRoutes.js';
 console.log('[9] lingxingPurchaseRoutes 导入完成');
-import lingxingLogisticsRoutes from './routes/lingxingLogisticsRoutes.js';
+import lingxingLogisticsRoutes from './routes/lingxing/lingxingLogisticsRoutes.js';
 console.log('[10] lingxingLogisticsRoutes 导入完成');
-import lingxingWarehouseRoutes from './routes/lingxingWarehouseRoutes.js';
+import lingxingWarehouseRoutes from './routes/lingxing/lingxingWarehouseRoutes.js';
 console.log('[11] lingxingWarehouseRoutes 导入完成');
+import lingxingToolsRoutes from './routes/lingxing/lingxingToolsRoutes.js';
+console.log('[12] lingxingToolsRoutes 导入完成');
 import accountRoutes from './routes/accountRoutes.js';
-console.log('[12] accountRoutes 导入完成');
+console.log('[13] accountRoutes 导入完成');
 
 // 加载环境变量
 console.log('[13] 加载环境变量...');
@@ -74,8 +76,10 @@ const start = async () => {
     console.log('[27] lingxingLogisticsRoutes 注册完成');
     await fastify.register(lingxingWarehouseRoutes, { prefix: '/api/lingxing/warehouse' });
     console.log('[28] lingxingWarehouseRoutes 注册完成');
+    await fastify.register(lingxingToolsRoutes, { prefix: '/api/lingxing/tools' });
+    console.log('[29] lingxingToolsRoutes 注册完成');
     await fastify.register(accountRoutes, { prefix: '/api/accounts' });
-    console.log('[29] accountRoutes 注册完成');
+    console.log('[30] accountRoutes 注册完成');
 
     // 404处理
     fastify.setNotFoundHandler(async (request, reply) => {
@@ -95,9 +99,9 @@ const start = async () => {
     });
 
     // 启动服务器
-    console.log(`[30] 开始监听端口 ${PORT}...`);
+    console.log(`[31] 开始监听端口 ${PORT}...`);
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`[31] 服务器启动成功！`);
+    console.log(`[32] 服务器启动成功！`);
     console.log(`🚀 服务器运行在端口 ${PORT}`);
     console.log(`📊 健康检查: http://localhost:${PORT}/health`);
     console.log(`📚 API文档:`);
@@ -109,6 +113,7 @@ const start = async () => {
     console.log(`   - 领星采购管理: http://localhost:${PORT}/api/lingxing/purchase`);
     console.log(`   - 领星物流管理: http://localhost:${PORT}/api/lingxing/logistics`);
     console.log(`   - 领星仓库管理: http://localhost:${PORT}/api/lingxing/warehouse`);
+    console.log(`   - 领星工具管理: http://localhost:${PORT}/api/lingxing/tools`);
     console.log(`   - 账户管理: http://localhost:${PORT}/api/accounts`);
   } catch (err) {
     console.error('启动服务器失败:', err);
@@ -117,7 +122,7 @@ const start = async () => {
   }
 };
 
-console.log('[32] 调用 start() 函数...');
+console.log('[33] 调用 start() 函数...');
 start().catch(err => {
   console.error('[ERROR] start() 函数执行失败:', err);
   process.exit(1);

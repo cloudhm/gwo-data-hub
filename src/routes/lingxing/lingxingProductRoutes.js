@@ -1,4 +1,4 @@
-import lingxingProductService from '../services/lingxing/products/lingxingProductService.js';
+import lingxingProductService from '../../services/lingxing/products/lingxingProductService.js';
 
 /**
  * 领星ERP产品路由插件

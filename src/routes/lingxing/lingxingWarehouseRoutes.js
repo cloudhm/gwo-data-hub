@@ -1,4 +1,4 @@
-import lingxingWarehouseService from '../services/lingxing/warehouse/lingXingWarehouseService.js';
+import lingxingWarehouseService from '../../services/lingxing/warehouse/lingXingWarehouseService.js';
 
 /**
  * 领星ERP仓库路由插件

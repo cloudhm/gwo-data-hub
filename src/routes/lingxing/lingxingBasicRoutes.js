@@ -1,4 +1,4 @@
-import lingxingBasicDataService from '../services/lingxing/basic/lingxingBasicDataService.js';
+import lingxingBasicDataService from '../../services/lingxing/basic/lingxingBasicDataService.js';
 
 /**
  * 领星ERP基础数据路由插件

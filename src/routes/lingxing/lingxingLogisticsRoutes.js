@@ -1,4 +1,4 @@
-import lingxingLogisticsService from '../services/lingxing/logistics/lingXingLogisticsService.js';
+import lingxingLogisticsService from '../../services/lingxing/logistics/lingXingLogisticsService.js';
 
 /**
  * 领星ERP物流路由插件

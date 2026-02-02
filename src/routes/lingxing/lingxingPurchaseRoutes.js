@@ -1,4 +1,4 @@
-import lingxingPurchaseService from '../services/lingxing/purchase/lingXingPurchaseService.js';
+import lingxingPurchaseService from '../../services/lingxing/purchase/lingXingPurchaseService.js';
 
 /**
  * 领星ERP采购路由插件
