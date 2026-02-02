@@ -12,23 +12,24 @@ datasource db {
 
 // 亚马逊店铺数据模型
 model AmazonStore {
-  id          String   @id @default(uuid())
-  storeName   String   // 店铺名称
-  storeId     String   @unique // 店铺ID
-  region      String   // 区域（如：US, EU, JP等）
-  accessKey   String?  // API访问密钥 (Client ID)
-  secretKey   String?  // API密钥 (Client Secret)
-  refreshToken String? // Refresh Token (用于获取访问令牌)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // 关联的订单数据
-  orders      AmazonOrder[]
-  // 关联的产品数据
-  products    AmazonProduct[]
-  // 关联的库存数据
-  inventories AmazonInventory[]
-  
+  id             String   @id @default(uuid())
+  sellerId       String   // Amazon 卖家ID (selling_partner_id)
+  accountId         String   // 关联的用户ID
+  refreshToken   String?  // Refresh Token (从Amazon OAuth获得)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  countryCode  String   // country code（如"US"）
+
+  linkedAt       DateTime?  // 授权/关联时间
+  archived       Boolean  @default(false) // 是否归档
+  isAuthorized   Boolean  @default(true) // 是否授权
+  data           Json?    // 完整的店铺信息
+
+  @@unique([accountId, sellerId, countryCode])
+  @@index([sellerId])
+  @@index([accountId])
+  @@index([countryCode])
+  @@index([archived])
   @@map("amazon_stores")
 }
 
