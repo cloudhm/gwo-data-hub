@@ -186,6 +186,14 @@ model LingXingAccount {
   inboundOrders LingXingInboundOrder[]
   // 关联的出库单（一个账户下可以有多个出库单）
   outboundOrders LingXingOutboundOrder[]
+  // 关联的收货单（一个账户下可以有多个收货单）
+  purchaseReceiptOrders LingXingPurchaseReceiptOrder[]
+  // 关联的收货单质检单（一个账户下可以有多个质检单）
+  receiptOrderQcs LingXingReceiptOrderQc[]
+  // 关联的海外仓备货单（一个账户下可以有多个备货单）
+  overseasWarehouseStockOrders LingXingOverseasWarehouseStockOrder[]
+  // 关联的WMS销售出库单（一个账户下可以有多个销售出库单）
+  wmsOrders LingXingWmsOrder[]
   // 关联的产品仓位推荐（一个账户下可以有多个产品仓位推荐记录）
   productEntryRecommendBins LingXingProductEntryRecommendBin[]
   // 关联的费用类型（一个账户下可以有多个费用类型）
@@ -1455,17 +1463,31 @@ model LingXingWarehouseInventoryStatement {
 
 // 领星ERP仓位流水（仓位库存流水数据）
 model LingXingWarehouseBinStatement {
-  id          String   @id @default(uuid())
-  accountId   String   // 关联的领星账户ID
-  wid         String   // 仓库ID（唯一键的一部分，不能为空）
-  binId       String   // 仓位ID（唯一键的一部分，不能为空，对应API的whb_id）
-  orderSn     String   // 订单号（唯一键的一部分，不能为空）
-  productId   BigInt?  // 产品ID（唯一键的一部分）
-  data        Json?    // 完整的数据
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(uuid())
+  accountId       String   // 关联的领星账户ID
+  wid             String   // 仓库ID（唯一键的一部分，不能为空）
+  binId           String   // 仓位ID（唯一键的一部分，不能为空，对应API的whb_id）
+  orderSn         String   // 订单号（唯一键的一部分，不能为空）
+  productId       BigInt?  // 产品ID（唯一键的一部分）
+  num             Int?     // 数量
+  sku             String?  // SKU
+  type            Int?     // 流水类型
+  fnsku           String?  // FNSKU
+  remark          String?  @db.Text // 备注
+  optUid          BigInt?  // 操作人员ID
+  optTime         String?  // 操作时间
+  whbName         String?  // 仓位名称
+  sellerId        String?  // 店铺ID
+  typeText        String?  // 流水类型文本
+  optRealname     String?  // 操作人员姓名
+  productName     String?  @db.Text // 产品名称
+  whbTypeName     String?  // 仓位类型名称
+  wareHouseName   String?  // 仓库名称
+  data            Json?    // 完整的数据
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
   
-  account     LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account         LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   
   @@unique([accountId, wid, binId, orderSn, productId], name: "accountId_wid_binId_orderSn_productId")
   @@index([accountId])
@@ -1473,6 +1495,8 @@ model LingXingWarehouseBinStatement {
   @@index([binId])
   @@index([orderSn])
   @@index([productId])
+  @@index([sku])
+  @@index([optTime])
   @@index([createdAt])
   @@map("ods_lingxing_warehouse_bin_statements")
 }
@@ -1537,6 +1561,173 @@ model LingXingOutboundOrder {
   @@index([wid])
   @@index([createdAt])
   @@map("ods_lingxing_outbound_orders")
+}
+
+// 领星ERP海外仓备货单
+model LingXingOverseasWarehouseStockOrder {
+  id                  String   @id @default(uuid())
+  accountId           String   // 关联的领星账户ID
+  overseasOrderNo    String   // 备货单号（唯一键的一部分）
+  data                Json?    // 完整的数据
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  account             LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, overseasOrderNo], name: "accountId_overseasOrderNo")
+  @@index([accountId])
+  @@index([overseasOrderNo])
+  @@index([createdAt])
+  @@map("ods_lingxing_overseas_warehouse_stock_orders")
+}
+
+// 领星ERP WMS销售出库单
+model LingXingWmsOrder {
+  id              String   @id @default(uuid())
+  accountId       String   // 关联的领星账户ID
+  woNumber        String   // 销售出库单号（唯一键的一部分）
+  data            Json?    // 完整的数据
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  account         LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, woNumber], name: "accountId_woNumber")
+  @@index([accountId])
+  @@index([woNumber])
+  @@index([createdAt])
+  @@map("ods_lingxing_wms_orders")
+}
+
+// 领星ERP收货单（采购收货单）
+model LingXingPurchaseReceiptOrder {
+  id                  String   @id @default(uuid())
+  accountId           String   // 关联的领星账户ID
+  orderSn             String   // 收货单单号
+  wid                 String?  // 仓库ID
+  remark              String?  @db.Text // 备注
+  status              Int?     // 状态
+  optUid              BigInt?  // 操作人员ID
+  qcType              Int?     // 质检类型
+  otherFee            Decimal? @db.Decimal(10, 2) // 其他费用
+  createUid           BigInt?  // 创建人ID
+  orderType           String?  // 收货类型
+  createTime          String?  // 创建时间
+  receiveUid          BigInt?  // 收货人ID
+  supplierId          BigInt?  // 供应商ID
+  updateTime          String?  // 更新时间
+  optRealname         String?  // 操作人姓名
+  receiveTime         String?  // 收货时间
+  shippingCost        Decimal? @db.Decimal(10, 2) // 运费
+  otherCurrency       String?  // 其他费用币种
+  createRealname      String?  // 创建人姓名
+  receiveRealname     String?  // 收货人姓名
+  businessOrderSn     String?  // 业务单号（采购单号）
+  inboundOrderSns     Json?    // 入库单号列表
+  logisticsCompany    String?  // 物流公司
+  shippingCurrency    String?  // 运费币种
+  logisticsOrderNo    String?  // 物流单号
+  expectArrivalTime   String?  // 预计到货时间
+  itemList            Json?    // 收货单项列表
+  data                Json?    // 完整的数据
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  account             LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, orderSn], name: "accountId_purchaseReceiptOrderSn")
+  @@index([accountId])
+  @@index([orderSn])
+  @@index([wid])
+  @@index([status])
+  @@index([supplierId])
+  @@index([businessOrderSn])
+  @@index([createTime])
+  @@index([receiveTime])
+  @@index([createdAt])
+  @@map("ods_lingxing_purchase_receipt_orders")
+}
+
+// 领星ERP收货单质检单（质检单详情）
+model LingXingReceiptOrderQc {
+  id                  String   @id @default(uuid())
+  accountId           String   // 关联的领星账户ID
+  qcSn                String   // 质检单号（唯一键的一部分）
+  qcId                String?  // 质检单ID
+  qcType              String?  // 质检类型
+  qcTypeText          String?  // 质检类型文本
+  qcMethod            String?  // 质检方式
+  qcMethodText        String?  // 质检方式文本
+  qcImage             String?  @db.Text // 质检图片
+  receiveTime         String?  // 收货时间
+  receiveUid          BigInt?  // 收货人ID
+  qcUid               BigInt?  // 质检人ID
+  sid                 String?  // 店铺ID
+  productReceiveNum   Int?     // 产品收货数量
+  productGoodNum      Int?     // 产品良品数量
+  productBadNum       Int?     // 产品次品数量
+  qcTime              String?  // 质检时间
+  status              String?  // 状态
+  statusText          String?  // 状态文本
+  price               Decimal? @db.Decimal(10, 4) // 价格
+  productId           BigInt?  // 产品ID
+  productName         String?  @db.Text // 产品名称
+  sku                 String?  // SKU
+  wid                 Int?     // 仓库ID
+  orderId             String?  // 订单ID
+  orderSn             String?  // 订单号
+  orderType           String?  // 订单类型
+  cgUid               BigInt?  // 采购员ID
+  fnsku               String?  // FNSKU
+  fileId              String?  // 文件ID
+  qcNum               Int?     // 质检数量
+  qcBadNum            Int?     // 质检次品数量
+  qcRate              Decimal? @db.Decimal(10, 4) // 质检率
+  qcRatePass          Decimal? @db.Decimal(10, 4) // 质检通过率
+  qcRemark            String?  @db.Text // 质检备注
+  qcPicUrl            String?  @db.Text // 质检图片URL
+  whbCodeGood         String?  // 良品仓位代码
+  whbCodeBad          String?  // 次品仓位代码
+  productQcNum        Int?     // 产品质检数量
+  qcRealname          String?  // 质检人姓名
+  receiveRealname     String?  // 收货人姓名
+  optRealname         String?  // 操作人姓名
+  picUrl              String?  @db.Text // 图片URL
+  isCombo             Int?     // 是否为组合产品：0 否，1 是
+  isAux               Int?     // 是否为辅料：0 否，1 是
+  supplierId          Int?     // 供应商ID
+  supplierName        String?  // 供应商名称
+  source              Int?     // 来源
+  file                Json?    // 文件信息
+  image                Json?    // 图片信息
+  qcStandard          Json?    // 质检标准（JSON数组）
+  customReceiveTime   String?  // 自定义收货时间
+  customQcTime        String?  // 自定义质检时间
+  deliveryOrderSn     String?  // 发货单号
+  sourceCustomOrderSn String?  // 来源自定义订单号
+  whbCodeGoodList     Json?    // 良品仓位代码列表
+  whbCodeBadList      Json?    // 次品仓位代码列表
+  qcDetailData        Json?    // 质检单详情完整数据
+  data                Json?    // 完整的数据（列表数据）
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  account             LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, qcSn], name: "accountId_qcSn")
+  @@index([accountId])
+  @@index([qcSn])
+  @@index([qcId])
+  @@index([status])
+  @@index([wid])
+  @@index([orderSn])
+  @@index([productId])
+  @@index([sku])
+  @@index([supplierId])
+  @@index([qcTime])
+  @@index([receiveTime])
+  @@index([createdAt])
+  @@map("ods_lingxing_receipt_order_qcs")
 }
 
 // 领星ERP财务管理 - 费用类型
@@ -1842,19 +2033,22 @@ model LingXingReceivableReportDetail {
 
 // 领星ERP亚马逊报表数据（通用报表数据表）
 model LingXingAmazonReport {
-  id          String   @id @default(uuid())
-  accountId   String   // 关联的领星账户ID
-  reportType  String   // 报表类型：allOrders, fbaOrders, fbaInventory, fbaExchangeOrders, fbaRefundOrders, fbmReturnOrders, removalOrders, removalShipment, fbaFulfillableQuantity, reservedInventory, transaction, amazonFulfilledShipments, fbaInventoryEventDetail, adjustmentList
-  sid         Int?     // 店铺ID
-  data        Json?    // 完整的数据
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(uuid())
+  accountId     String   // 关联的领星账户ID
+  reportType    String   // 报表类型：allOrders, fbaOrders, fbaInventory, fbaExchangeOrders, fbaRefundOrders, fbmReturnOrders, removalOrders, removalShipment, fbaFulfillableQuantity, reservedInventory, transaction, amazonFulfilledShipments, fbaInventoryEventDetail, adjustmentList
+  sid           Int?     // 店铺ID
+  amazonOrderId String?  // 亚马逊订单ID（作为唯一键，用于更新）
+  data          Json?    // 完整的数据
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   
-  account     LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account       LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   
+  @@unique([accountId, reportType, amazonOrderId])
   @@index([accountId])
   @@index([reportType])
   @@index([sid])
+  @@index([amazonOrderId])
   @@index([createdAt])
   @@map("ods_lingxing_amazon_reports")
 }

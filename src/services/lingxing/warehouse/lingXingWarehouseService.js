@@ -1844,6 +1844,24 @@ class LingXingWarehouseService extends LingXingApiClient {
           ? (typeof productId === 'string' ? BigInt(productId) : BigInt(productId))
           : null;
 
+        // 提取所有字段
+        const num = statement.num !== undefined ? statement.num : null;
+        const sku = statement.sku || null;
+        const type = statement.type !== undefined ? statement.type : null;
+        const fnsku = statement.fnsku || null;
+        const remark = statement.remark || null;
+        const optUid = statement.opt_uid !== undefined && statement.opt_uid !== null
+          ? (typeof statement.opt_uid === 'string' ? BigInt(statement.opt_uid) : BigInt(statement.opt_uid))
+          : null;
+        const optTime = statement.opt_time || null;
+        const whbName = statement.whb_name || null;
+        const sellerId = statement.seller_id !== undefined ? String(statement.seller_id) : null;
+        const typeText = statement.type_text || null;
+        const optRealname = statement.opt_realname || null;
+        const productName = statement.product_name || null;
+        const whbTypeName = statement.whb_type_name || null;
+        const wareHouseName = statement.ware_house_name || null;
+
         // 使用 upsert 避免重复数据，唯一键包含 accountId, wid, binId, orderSn, productId
         await prisma.lingXingWarehouseBinStatement.upsert({
           where: {
@@ -1860,6 +1878,20 @@ class LingXingWarehouseService extends LingXingApiClient {
             binId: binIdStr,
             orderSn: orderSnStr,
             productId: productIdValue,
+            num: num,
+            sku: sku,
+            type: type,
+            fnsku: fnsku,
+            remark: remark,
+            optUid: optUid,
+            optTime: optTime,
+            whbName: whbName,
+            sellerId: sellerId,
+            typeText: typeText,
+            optRealname: optRealname,
+            productName: productName,
+            whbTypeName: whbTypeName,
+            wareHouseName: wareHouseName,
             data: statement,
             updatedAt: new Date()
           },
@@ -1869,6 +1901,20 @@ class LingXingWarehouseService extends LingXingApiClient {
             binId: binIdStr,
             orderSn: orderSnStr,
             productId: productIdValue,
+            num: num,
+            sku: sku,
+            type: type,
+            fnsku: fnsku,
+            remark: remark,
+            optUid: optUid,
+            optTime: optTime,
+            whbName: whbName,
+            sellerId: sellerId,
+            typeText: typeText,
+            optRealname: optRealname,
+            productName: productName,
+            whbTypeName: whbTypeName,
+            wareHouseName: wareHouseName,
             data: statement
           }
         });
@@ -1964,7 +2010,8 @@ class LingXingWarehouseService extends LingXingApiClient {
           continue;
         }
 
-        const wid = order.wid || order.warehouse_id || null;
+        const wid = order.wid !== undefined ? order.wid : (order.warehouse_id !== undefined ? order.warehouse_id : null);
+        const widStr = wid !== undefined && wid !== null ? String(wid) : null;
 
         await prisma.lingXingInboundOrder.upsert({
           where: {
@@ -1974,14 +2021,14 @@ class LingXingWarehouseService extends LingXingApiClient {
             }
           },
           update: {
-            wid: wid || null,
+            wid: widStr,
             data: order,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             orderSn: order.order_sn,
-            wid: wid || null,
+            wid: widStr,
             data: order
           }
         });
@@ -2011,7 +2058,8 @@ class LingXingWarehouseService extends LingXingApiClient {
           continue;
         }
 
-        const wid = order.wid || order.warehouse_id || null;
+        const wid = order.wid !== undefined ? order.wid : (order.warehouse_id !== undefined ? order.warehouse_id : null);
+        const widStr = wid !== undefined && wid !== null ? String(wid) : null;
 
         await prisma.lingXingOutboundOrder.upsert({
           where: {
@@ -2021,14 +2069,14 @@ class LingXingWarehouseService extends LingXingApiClient {
             }
           },
           update: {
-            wid: wid || null,
+            wid: widStr,
             data: order,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             orderSn: order.order_sn,
-            wid: wid || null,
+            wid: widStr,
             data: order
           }
         });
@@ -2281,6 +2329,11 @@ class LingXingWarehouseService extends LingXingApiClient {
       const orderList = response.data?.list || [];
       const total = response.data?.total || 0;
 
+      // 保存到数据库
+      if (orderList && orderList.length > 0) {
+        await this.savePurchaseReceiptOrders(accountId, orderList);
+      }
+
       return {
         data: orderList,
         total: total
@@ -2288,6 +2341,143 @@ class LingXingWarehouseService extends LingXingApiClient {
     } catch (error) {
       console.error('获取收货单列表失败:', error.message);
       throw error;
+    }
+  }
+
+  /**
+   * 保存收货单列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} orders - 收货单列表数据
+   */
+  async savePurchaseReceiptOrders(accountId, orders) {
+    try {
+      if (!prisma.lingXingPurchaseReceiptOrder) {
+        console.error('Prisma Client 中未找到 lingXingPurchaseReceiptOrder 模型');
+        return;
+      }
+
+      for (const order of orders) {
+        // 使用 order_sn 作为唯一键
+        const orderSn = order.order_sn || order.orderSn || order.order_number || order.orderNumber;
+        
+        // 跳过缺少必要字段的记录
+        if (!orderSn) {
+          console.warn('跳过缺少 order_sn 的收货单记录:', order);
+          continue;
+        }
+
+        // 提取所有字段
+        const wid = order.wid || order.warehouse_id;
+        const widStr = wid ? String(wid) : null;
+        const remark = order.remark || null;
+        const status = order.status !== undefined ? order.status : null;
+        const optUid = order.opt_uid !== undefined && order.opt_uid !== null
+          ? (typeof order.opt_uid === 'string' ? BigInt(order.opt_uid) : BigInt(order.opt_uid))
+          : null;
+        const qcType = order.qc_type !== undefined ? order.qc_type : null;
+        const otherFee = order.other_fee !== undefined && order.other_fee !== null && order.other_fee !== ''
+          ? parseFloat(order.other_fee) : null;
+        const createUid = order.create_uid !== undefined && order.create_uid !== null
+          ? (typeof order.create_uid === 'string' ? BigInt(order.create_uid) : BigInt(order.create_uid))
+          : null;
+        const orderType = order.order_type || null;
+        const createTime = order.create_time || null;
+        const receiveUid = order.receive_uid !== undefined && order.receive_uid !== null
+          ? (typeof order.receive_uid === 'string' ? BigInt(order.receive_uid) : BigInt(order.receive_uid))
+          : null;
+        const supplierId = order.supplier_id !== undefined && order.supplier_id !== null
+          ? (typeof order.supplier_id === 'string' ? BigInt(order.supplier_id) : BigInt(order.supplier_id))
+          : null;
+        const updateTime = order.update_time || null;
+        const optRealname = order.opt_realname || null;
+        const receiveTime = order.receive_time || null;
+        const shippingCost = order.shipping_cost !== undefined && order.shipping_cost !== null && order.shipping_cost !== ''
+          ? parseFloat(order.shipping_cost) : null;
+        const otherCurrency = order.other_currency || null;
+        const createRealname = order.create_realname || null;
+        const receiveRealname = order.receive_realname || null;
+        const businessOrderSn = order.business_order_sn || null;
+        const inboundOrderSns = order.inbound_order_sns || null;
+        const logisticsCompany = order.logistics_company || null;
+        const shippingCurrency = order.shipping_currency || null;
+        const logisticsOrderNo = order.logistics_order_no || null;
+        const expectArrivalTime = order.expect_arrival_time || null;
+        const itemList = order.item_list || null;
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, orderSn
+        await prisma.lingXingPurchaseReceiptOrder.upsert({
+          where: {
+            accountId_purchaseReceiptOrderSn: {
+              accountId: accountId,
+              orderSn: orderSn
+            }
+          },
+          update: {
+            wid: widStr,
+            remark: remark,
+            status: status,
+            optUid: optUid,
+            qcType: qcType,
+            otherFee: otherFee,
+            createUid: createUid,
+            orderType: orderType,
+            createTime: createTime,
+            receiveUid: receiveUid,
+            supplierId: supplierId,
+            updateTime: updateTime,
+            optRealname: optRealname,
+            receiveTime: receiveTime,
+            shippingCost: shippingCost,
+            otherCurrency: otherCurrency,
+            createRealname: createRealname,
+            receiveRealname: receiveRealname,
+            businessOrderSn: businessOrderSn,
+            inboundOrderSns: inboundOrderSns,
+            logisticsCompany: logisticsCompany,
+            shippingCurrency: shippingCurrency,
+            logisticsOrderNo: logisticsOrderNo,
+            expectArrivalTime: expectArrivalTime,
+            itemList: itemList,
+            data: order,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            orderSn: orderSn,
+            wid: widStr,
+            remark: remark,
+            status: status,
+            optUid: optUid,
+            qcType: qcType,
+            otherFee: otherFee,
+            createUid: createUid,
+            orderType: orderType,
+            createTime: createTime,
+            receiveUid: receiveUid,
+            supplierId: supplierId,
+            updateTime: updateTime,
+            optRealname: optRealname,
+            receiveTime: receiveTime,
+            shippingCost: shippingCost,
+            otherCurrency: otherCurrency,
+            createRealname: createRealname,
+            receiveRealname: receiveRealname,
+            businessOrderSn: businessOrderSn,
+            inboundOrderSns: inboundOrderSns,
+            logisticsCompany: logisticsCompany,
+            shippingCurrency: shippingCurrency,
+            logisticsOrderNo: logisticsOrderNo,
+            expectArrivalTime: expectArrivalTime,
+            itemList: itemList,
+            data: order
+          }
+        });
+      }
+
+      console.log(`收货单列表已保存到数据库: 共 ${orders.length} 条记录`);
+    } catch (error) {
+      console.error('保存收货单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
     }
   }
 
@@ -2452,6 +2642,11 @@ class LingXingWarehouseService extends LingXingApiClient {
       const qcList = response.data?.list || [];
       const total = response.data?.total || 0;
 
+      // 保存到数据库
+      if (qcList && qcList.length > 0) {
+        await this.saveReceiptOrderQcList(accountId, qcList);
+      }
+
       return {
         data: qcList,
         total: total
@@ -2463,7 +2658,185 @@ class LingXingWarehouseService extends LingXingApiClient {
   }
 
   /**
-   * 保存质检单详情到数据库
+   * 保存质检单列表到数据库（只保存基本信息）
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} qcList - 质检单列表数据
+   */
+  async saveReceiptOrderQcList(accountId, qcList) {
+    try {
+      if (!prisma.lingXingReceiptOrderQc) {
+        console.error('Prisma Client 中未找到 lingXingReceiptOrderQc 模型');
+        return;
+      }
+
+      for (const qc of qcList) {
+        if (!qc.qc_sn) {
+          console.warn('质检单缺少 qc_sn，跳过保存');
+          continue;
+        }
+
+        // 提取基本信息字段
+        const qcIdValue = qc.qc_id || null;
+        const qcTypeValue = qc.qc_type !== undefined && qc.qc_type !== null ? String(qc.qc_type) : null;
+        const qcMethodValue = qc.qc_method !== undefined && qc.qc_method !== null ? String(qc.qc_method) : null;
+        const statusValue = qc.status !== undefined && qc.status !== null ? String(qc.status) : null;
+        const widValue = qc.wid !== undefined && qc.wid !== null
+          ? (typeof qc.wid === 'string' ? parseInt(qc.wid) : qc.wid)
+          : null;
+        const orderTypeValue = qc.order_type !== undefined && qc.order_type !== null ? String(qc.order_type) : null;
+        const productReceiveNumValue = qc.product_receive_num !== undefined && qc.product_receive_num !== null
+          ? parseInt(qc.product_receive_num)
+          : null;
+        const productGoodNumValue = qc.product_good_num !== undefined && qc.product_good_num !== null
+          ? parseInt(qc.product_good_num)
+          : null;
+        const productBadNumValue = qc.product_bad_num !== undefined && qc.product_bad_num !== null
+          ? parseInt(qc.product_bad_num)
+          : null;
+        const qcNumValue = qc.qc_num !== undefined && qc.qc_num !== null ? parseInt(qc.qc_num) : null;
+        const qcBadNumValue = qc.qc_bad_num !== undefined && qc.qc_bad_num !== null ? parseInt(qc.qc_bad_num) : null;
+        const productQcNumValue = qc.product_qc_num !== undefined && qc.product_qc_num !== null
+          ? parseInt(qc.product_qc_num)
+          : null;
+        const isComboValue = qc.is_combo !== undefined && qc.is_combo !== null ? parseInt(qc.is_combo) : null;
+        const isAuxValue = qc.is_aux !== undefined && qc.is_aux !== null ? parseInt(qc.is_aux) : null;
+        const supplierIdValue = qc.supplier_id !== undefined && qc.supplier_id !== null
+          ? (typeof qc.supplier_id === 'string' ? parseInt(qc.supplier_id) : qc.supplier_id)
+          : null;
+        const sourceValue = qc.source !== undefined && qc.source !== null ? parseInt(qc.source) : null;
+
+        // 处理 BigInt 类型字段
+        const receiveUidValue = qc.receive_uid !== undefined && qc.receive_uid !== null
+          ? (typeof qc.receive_uid === 'string' ? BigInt(qc.receive_uid) : BigInt(qc.receive_uid))
+          : null;
+        const qcUidValue = qc.qc_uid !== undefined && qc.qc_uid !== null
+          ? (typeof qc.qc_uid === 'string' ? BigInt(qc.qc_uid) : BigInt(qc.qc_uid))
+          : null;
+        const cgUidValue = qc.cg_uid !== undefined && qc.cg_uid !== null
+          ? (typeof qc.cg_uid === 'string' ? BigInt(qc.cg_uid) : BigInt(qc.cg_uid))
+          : null;
+        const productIdValue = qc.product_id !== undefined && qc.product_id !== null
+          ? (typeof qc.product_id === 'string' ? BigInt(qc.product_id) : BigInt(qc.product_id))
+          : null;
+        const priceValue = qc.price !== undefined && qc.price !== null && qc.price !== ''
+          ? parseFloat(qc.price) : null;
+
+        // 处理 qcRate 和 qcRatePass（可能包含百分号，需要移除）
+        const qcRateValue = qc.qc_rate !== undefined && qc.qc_rate !== null && qc.qc_rate !== ''
+          ? parseFloat(String(qc.qc_rate).replace('%', '')) : null;
+        const qcRatePassValue = qc.qc_rate_pass !== undefined && qc.qc_rate_pass !== null && qc.qc_rate_pass !== ''
+          ? parseFloat(String(qc.qc_rate_pass).replace('%', '')) : null;
+
+        // 使用 upsert 保存基本信息（如果已存在详情，只更新基本信息，不覆盖详情字段）
+        await prisma.lingXingReceiptOrderQc.upsert({
+          where: {
+            accountId_qcSn: {
+              accountId: accountId,
+              qcSn: qc.qc_sn
+            }
+          },
+          update: {
+            // 只更新基本信息字段，不更新详情字段
+            qcId: qcIdValue,
+            qcType: qcTypeValue,
+            qcTypeText: qc.qc_type_text || null,
+            qcMethod: qcMethodValue,
+            qcMethodText: qc.qc_method_text || null,
+            receiveTime: qc.receive_time || null,
+            receiveUid: receiveUidValue,
+            qcUid: qcUidValue,
+            sid: qc.sid || null,
+            productReceiveNum: productReceiveNumValue,
+            productGoodNum: productGoodNumValue,
+            productBadNum: productBadNumValue,
+            qcTime: qc.qc_time || null,
+            status: statusValue,
+            statusText: qc.status_text || null,
+            price: priceValue,
+            productId: productIdValue,
+            productName: qc.product_name || null,
+            sku: qc.sku || null,
+            wid: widValue,
+            orderId: qc.order_id || null,
+            orderSn: qc.order_sn || null,
+            orderType: orderTypeValue,
+            cgUid: cgUidValue,
+            fnsku: qc.fnsku || null,
+            qcNum: qcNumValue,
+            qcBadNum: qcBadNumValue,
+            qcRate: qcRateValue,
+            qcRatePass: qcRatePassValue,
+            qcRemark: qc.qc_remark || null,
+            productQcNum: productQcNumValue,
+            qcRealname: qc.qc_realname || null,
+            receiveRealname: qc.receive_realname || null,
+            optRealname: qc.opt_realname || null,
+            picUrl: qc.pic_url || null,
+            isCombo: isComboValue,
+            isAux: isAuxValue,
+            supplierId: supplierIdValue,
+            supplierName: qc.supplier_name || null,
+            source: sourceValue,
+            data: qc, // 保存完整数据
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            qcSn: qc.qc_sn,
+            qcId: qcIdValue,
+            qcType: qcTypeValue,
+            qcTypeText: qc.qc_type_text || null,
+            qcMethod: qcMethodValue,
+            qcMethodText: qc.qc_method_text || null,
+            receiveTime: qc.receive_time || null,
+            receiveUid: receiveUidValue,
+            qcUid: qcUidValue,
+            sid: qc.sid || null,
+            productReceiveNum: productReceiveNumValue,
+            productGoodNum: productGoodNumValue,
+            productBadNum: productBadNumValue,
+            qcTime: qc.qc_time || null,
+            status: statusValue,
+            statusText: qc.status_text || null,
+            price: priceValue,
+            productId: productIdValue,
+            productName: qc.product_name || null,
+            sku: qc.sku || null,
+            wid: widValue,
+            orderId: qc.order_id || null,
+            orderSn: qc.order_sn || null,
+            orderType: orderTypeValue,
+            cgUid: cgUidValue,
+            fnsku: qc.fnsku || null,
+            qcNum: qcNumValue,
+            qcBadNum: qcBadNumValue,
+            qcRate: qcRateValue,
+            qcRatePass: qcRatePassValue,
+            qcRemark: qc.qc_remark || null,
+            productQcNum: productQcNumValue,
+            qcRealname: qc.qc_realname || null,
+            receiveRealname: qc.receive_realname || null,
+            optRealname: qc.opt_realname || null,
+            picUrl: qc.pic_url || null,
+            isCombo: isComboValue,
+            isAux: isAuxValue,
+            supplierId: supplierIdValue,
+            supplierName: qc.supplier_name || null,
+            source: sourceValue,
+            data: qc // 保存完整数据
+          }
+        });
+      }
+
+      console.log(`质检单列表已保存到数据库: 共 ${qcList.length} 条记录`);
+    } catch (error) {
+      console.error('保存质检单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 保存质检单详情到数据库（只更新详情字段）
    * @param {string} accountId - 领星账户ID
    * @param {Object} qcDetail - 质检单详情数据
    */
@@ -2481,123 +2854,20 @@ class LingXingWarehouseService extends LingXingApiClient {
         return;
       }
 
-      // 处理 qc_id（质检单id，可能是字符串）
-      const qcIdValue = qcDetail.qc_id || null;
-
-      // 处理各种字段
-      const qcTypeValue = qcDetail.qc_type !== undefined && qcDetail.qc_type !== null 
-        ? String(qcDetail.qc_type) 
-        : null;
-
-      const qcMethodValue = qcDetail.qc_method !== undefined && qcDetail.qc_method !== null
-        ? String(qcDetail.qc_method)
-        : null;
-
-      const statusValue = qcDetail.status !== undefined && qcDetail.status !== null
-        ? String(qcDetail.status)
-        : null;
-
-      const widValue = qcDetail.wid !== undefined && qcDetail.wid !== null
-        ? (typeof qcDetail.wid === 'string' ? parseInt(qcDetail.wid) : qcDetail.wid)
-        : null;
-
-      const orderTypeValue = qcDetail.order_type !== undefined && qcDetail.order_type !== null
-        ? String(qcDetail.order_type)
-        : null;
-
-      const productReceiveNumValue = qcDetail.product_receive_num !== undefined && qcDetail.product_receive_num !== null
-        ? parseInt(qcDetail.product_receive_num)
-        : null;
-
-      const productGoodNumValue = qcDetail.product_good_num !== undefined && qcDetail.product_good_num !== null
-        ? parseInt(qcDetail.product_good_num)
-        : null;
-
-      const productBadNumValue = qcDetail.product_bad_num !== undefined && qcDetail.product_bad_num !== null
-        ? parseInt(qcDetail.product_bad_num)
-        : null;
-
-      const qcNumValue = qcDetail.qc_num !== undefined && qcDetail.qc_num !== null
-        ? parseInt(qcDetail.qc_num)
-        : null;
-
-      const qcBadNumValue = qcDetail.qc_bad_num !== undefined && qcDetail.qc_bad_num !== null
-        ? parseInt(qcDetail.qc_bad_num)
-        : null;
-
-      const productQcNumValue = qcDetail.product_qc_num !== undefined && qcDetail.product_qc_num !== null
-        ? parseInt(qcDetail.product_qc_num)
-        : null;
-
-      const isComboValue = qcDetail.is_combo !== undefined && qcDetail.is_combo !== null
-        ? parseInt(qcDetail.is_combo)
-        : null;
-
-      const isAuxValue = qcDetail.is_aux !== undefined && qcDetail.is_aux !== null
-        ? parseInt(qcDetail.is_aux)
-        : null;
-
-      const supplierIdValue = qcDetail.supplier_id !== undefined && qcDetail.supplier_id !== null
-        ? (typeof qcDetail.supplier_id === 'string' ? parseInt(qcDetail.supplier_id) : qcDetail.supplier_id)
-        : null;
-
-      const sourceValue = qcDetail.source !== undefined && qcDetail.source !== null
-        ? parseInt(qcDetail.source)
-        : null;
-
-      await prisma.lingXingReceiptOrderQc.upsert({
+      // 只更新详情字段，基本信息应该由列表保存方法处理
+      await prisma.lingXingReceiptOrderQc.update({
         where: {
           accountId_qcSn: {
             accountId: accountId,
             qcSn: qcDetail.qc_sn
           }
         },
-        update: {
-          qcId: qcIdValue,
-          qcType: qcTypeValue,
-          qcTypeText: qcDetail.qc_type_text || null,
-          qcMethod: qcMethodValue,
-          qcMethodText: qcDetail.qc_method_text || null,
+        data: {
+          // 只更新详情相关字段
           qcImage: qcDetail.qc_image || null,
-          receiveTime: qcDetail.receive_time || null,
-          receiveUid: qcDetail.receive_uid || null,
-          qcUid: qcDetail.qc_uid || null,
-          sid: qcDetail.sid || null,
-          productReceiveNum: productReceiveNumValue,
-          productGoodNum: productGoodNumValue,
-          productBadNum: productBadNumValue,
-          qcTime: qcDetail.qc_time || null,
-          status: statusValue,
-          statusText: qcDetail.status_text || null,
-          price: qcDetail.price || null,
-          productId: qcDetail.product_id || null,
-          productName: qcDetail.product_name || null,
-          sku: qcDetail.sku || null,
-          wid: widValue,
-          orderId: qcDetail.order_id || null,
-          orderSn: qcDetail.order_sn || null,
-          orderType: orderTypeValue,
-          cgUid: qcDetail.cg_uid || null,
-          fnsku: qcDetail.fnsku || null,
-          fileId: qcDetail.file_id || null,
-          qcNum: qcNumValue,
-          qcBadNum: qcBadNumValue,
-          qcRate: qcDetail.qc_rate || null,
-          qcRatePass: qcDetail.qc_rate_pass || null,
-          qcRemark: qcDetail.qc_remark || null,
           qcPicUrl: qcDetail.qc_pic_url || null,
           whbCodeGood: qcDetail.whb_code_good || null,
           whbCodeBad: qcDetail.whb_code_bad || null,
-          productQcNum: productQcNumValue,
-          qcRealname: qcDetail.qc_realname || null,
-          receiveRealname: qcDetail.receive_realname || null,
-          optRealname: qcDetail.opt_realname || null,
-          picUrl: qcDetail.pic_url || null,
-          isCombo: isComboValue,
-          isAux: isAuxValue,
-          supplierId: supplierIdValue,
-          supplierName: qcDetail.supplier_name || null,
-          source: sourceValue,
           file: qcDetail.file || null,
           image: qcDetail.image || null,
           qcStandard: qcDetail.qc_standard || null,
@@ -2609,70 +2879,16 @@ class LingXingWarehouseService extends LingXingApiClient {
           whbCodeBadList: qcDetail.whb_code_bad_list || null,
           qcDetailData: qcDetail, // 保存完整数据
           updatedAt: new Date()
-        },
-        create: {
-          accountId: accountId,
-          qcSn: qcDetail.qc_sn,
-          qcId: qcIdValue,
-          qcType: qcTypeValue,
-          qcTypeText: qcDetail.qc_type_text || null,
-          qcMethod: qcMethodValue,
-          qcMethodText: qcDetail.qc_method_text || null,
-          qcImage: qcDetail.qc_image || null,
-          receiveTime: qcDetail.receive_time || null,
-          receiveUid: qcDetail.receive_uid || null,
-          qcUid: qcDetail.qc_uid || null,
-          sid: qcDetail.sid || null,
-          productReceiveNum: productReceiveNumValue,
-          productGoodNum: productGoodNumValue,
-          productBadNum: productBadNumValue,
-          qcTime: qcDetail.qc_time || null,
-          status: statusValue,
-          statusText: qcDetail.status_text || null,
-          price: qcDetail.price || null,
-          productId: qcDetail.product_id || null,
-          productName: qcDetail.product_name || null,
-          sku: qcDetail.sku || null,
-          wid: widValue,
-          orderId: qcDetail.order_id || null,
-          orderSn: qcDetail.order_sn || null,
-          orderType: orderTypeValue,
-          cgUid: qcDetail.cg_uid || null,
-          fnsku: qcDetail.fnsku || null,
-          fileId: qcDetail.file_id || null,
-          qcNum: qcNumValue,
-          qcBadNum: qcBadNumValue,
-          qcRate: qcDetail.qc_rate || null,
-          qcRatePass: qcDetail.qc_rate_pass || null,
-          qcRemark: qcDetail.qc_remark || null,
-          qcPicUrl: qcDetail.qc_pic_url || null,
-          whbCodeGood: qcDetail.whb_code_good || null,
-          whbCodeBad: qcDetail.whb_code_bad || null,
-          productQcNum: productQcNumValue,
-          qcRealname: qcDetail.qc_realname || null,
-          receiveRealname: qcDetail.receive_realname || null,
-          optRealname: qcDetail.opt_realname || null,
-          picUrl: qcDetail.pic_url || null,
-          isCombo: isComboValue,
-          isAux: isAuxValue,
-          supplierId: supplierIdValue,
-          supplierName: qcDetail.supplier_name || null,
-          source: sourceValue,
-          file: qcDetail.file || null,
-          image: qcDetail.image || null,
-          qcStandard: qcDetail.qc_standard || null,
-          customReceiveTime: qcDetail.custom_receive_time || null,
-          customQcTime: qcDetail.custom_qc_time || null,
-          deliveryOrderSn: qcDetail.delivery_order_sn || null,
-          sourceCustomOrderSn: qcDetail.source_custom_order_sn || null,
-          whbCodeGoodList: qcDetail.whb_code_good_list || null,
-          whbCodeBadList: qcDetail.whb_code_bad_list || null,
-          qcDetailData: qcDetail // 保存完整数据
         }
       });
     } catch (error) {
-      console.error('保存质检单详情到数据库失败:', error.message);
-      console.error('错误详情:', error);
+      // 如果记录不存在，记录警告但不抛出错误
+      if (error.code === 'P2025') {
+        console.warn(`质检单 ${qcDetail.qc_sn} 不存在，请先拉取列表`);
+      } else {
+        console.error('保存质检单详情到数据库失败:', error.message);
+        console.error('错误详情:', error);
+      }
       // 不抛出错误，因为保存失败不应该影响API调用
     }
   }
@@ -2759,9 +2975,9 @@ class LingXingWarehouseService extends LingXingApiClient {
 
       console.log(`所有质检单列表获取完成，共 ${allQcList.length} 条记录`);
 
-      // 自动拉取并保存每个质检单的详情
+      // 自动拉取每个质检单的详情（保存逻辑已在 getReceiptOrderQcDetail 中处理）
       if (autoFetchDetails && allQcList.length > 0) {
-        console.log('开始自动拉取并保存质检单详情...');
+        console.log('开始自动拉取质检单详情...');
         let successCount = 0;
         let failCount = 0;
 
@@ -2778,9 +2994,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             const detailResult = await this.getReceiptOrderQcDetail(accountId, { qc_sn: qc.qc_sn });
             
             if (detailResult.data) {
-              await this.saveReceiptOrderQcDetail(accountId, detailResult.data);
               successCount++;
-              console.log(`质检单详情保存成功: ${qc.qc_sn}`);
+              console.log(`质检单详情获取并保存成功: ${qc.qc_sn}`);
             } else {
               console.warn(`质检单详情为空: ${qc.qc_sn}`);
               failCount++;
@@ -2791,7 +3006,7 @@ class LingXingWarehouseService extends LingXingApiClient {
               await new Promise(resolve => setTimeout(resolve, delayBetweenDetails));
             }
           } catch (error) {
-            console.error(`获取或保存质检单详情失败 (${qc.qc_sn}):`, error.message);
+            console.error(`获取质检单详情失败 (${qc.qc_sn}):`, error.message);
             failCount++;
             // 继续处理下一个，不中断整个流程
           }
@@ -2854,6 +3069,11 @@ class LingXingWarehouseService extends LingXingApiClient {
       }
 
       const qcDetail = response.data || {};
+
+      // 保存到数据库
+      if (qcDetail && Object.keys(qcDetail).length > 0) {
+        await this.saveReceiptOrderQcDetail(accountId, qcDetail);
+      }
 
       return {
         data: qcDetail
@@ -3311,6 +3531,11 @@ class LingXingWarehouseService extends LingXingApiClient {
       const stockOrderList = response.data || [];
       const total = response.total || 0;
 
+      // 保存到数据库
+      if (stockOrderList && stockOrderList.length > 0) {
+        await this.saveOverseasWarehouseStockOrders(accountId, stockOrderList);
+      }
+
       return {
         data: stockOrderList,
         total: total
@@ -3318,6 +3543,55 @@ class LingXingWarehouseService extends LingXingApiClient {
     } catch (error) {
       console.error('获取海外仓备货单列表失败:', error.message);
       throw error;
+    }
+  }
+
+  /**
+   * 保存海外仓备货单列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} stockOrders - 海外仓备货单列表数据
+   */
+  async saveOverseasWarehouseStockOrders(accountId, stockOrders) {
+    try {
+      if (!prisma.lingXingOverseasWarehouseStockOrder) {
+        console.error('Prisma Client 中未找到 lingXingOverseasWarehouseStockOrder 模型');
+        return;
+      }
+
+      for (const order of stockOrders) {
+        // 使用 overseas_order_no 作为唯一键
+        const overseasOrderNo = order.overseas_order_no || order.overseasOrderNo || order.order_no || order.orderNo;
+        
+        // 跳过缺少必要字段的记录
+        if (!overseasOrderNo) {
+          console.warn('跳过缺少 overseas_order_no 的海外仓备货单记录:', order);
+          continue;
+        }
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, overseasOrderNo
+        await prisma.lingXingOverseasWarehouseStockOrder.upsert({
+          where: {
+            accountId_overseasOrderNo: {
+              accountId: accountId,
+              overseasOrderNo: overseasOrderNo
+            }
+          },
+          update: {
+            data: order,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            overseasOrderNo: overseasOrderNo,
+            data: order
+          }
+        });
+      }
+
+      console.log(`海外仓备货单列表已保存到数据库: 共 ${stockOrders.length} 条记录`);
+    } catch (error) {
+      console.error('保存海外仓备货单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
     }
   }
 
@@ -3546,6 +3820,11 @@ class LingXingWarehouseService extends LingXingApiClient {
       const wmsOrderList = response.data || [];
       const total = response.total || 0;
 
+      // 保存到数据库
+      if (wmsOrderList && wmsOrderList.length > 0) {
+        await this.saveWmsOrders(accountId, wmsOrderList);
+      }
+
       return {
         data: wmsOrderList,
         total: total
@@ -3553,6 +3832,55 @@ class LingXingWarehouseService extends LingXingApiClient {
     } catch (error) {
       console.error('获取销售出库单列表失败:', error.message);
       throw error;
+    }
+  }
+
+  /**
+   * 保存WMS销售出库单列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} wmsOrders - WMS销售出库单列表数据
+   */
+  async saveWmsOrders(accountId, wmsOrders) {
+    try {
+      if (!prisma.lingXingWmsOrder) {
+        console.error('Prisma Client 中未找到 lingXingWmsOrder 模型');
+        return;
+      }
+
+      for (const order of wmsOrders) {
+        // 使用 wo_number 作为唯一键
+        const woNumber = order.wo_number || order.woNumber || order.order_number || order.orderNumber;
+        
+        // 跳过缺少必要字段的记录
+        if (!woNumber) {
+          console.warn('跳过缺少 wo_number 的WMS销售出库单记录:', order);
+          continue;
+        }
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, woNumber
+        await prisma.lingXingWmsOrder.upsert({
+          where: {
+            accountId_woNumber: {
+              accountId: accountId,
+              woNumber: woNumber
+            }
+          },
+          update: {
+            data: order,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            woNumber: woNumber,
+            data: order
+          }
+        });
+      }
+
+      console.log(`WMS销售出库单列表已保存到数据库: 共 ${wmsOrders.length} 条记录`);
+    } catch (error) {
+      console.error('保存WMS销售出库单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
     }
   }
 

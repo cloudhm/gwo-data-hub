@@ -154,6 +154,11 @@ class LingXingAmazonService extends LingXingApiClient {
       const orders = response.data || [];
       const total = response.total || 0;
 
+      // 保存到数据库
+      if (orders && orders.length > 0) {
+        await this.saveAmazonReport(accountId, 'fbaOrders', orders, params.sid);
+      }
+
       return {
         data: orders,
         total: total
@@ -1336,10 +1341,7 @@ class LingXingAmazonService extends LingXingApiClient {
 
       console.log(`所有FBA订单数据获取完成，共 ${allOrders.length} 条FBA订单`);
 
-      // 保存到数据库
-      if (allOrders && allOrders.length > 0) {
-        await this.saveAmazonReport(accountId, 'fbaOrders', allOrders, filterParams.sid);
-      }
+      // 数据已在 getFbaOrdersReport 中保存，此处无需重复保存
 
       return {
         orders: allOrders,
@@ -1680,6 +1682,22 @@ class LingXingAmazonService extends LingXingApiClient {
   }
 
   /**
+   * 从数据项中提取 amazon_order_id
+   * @param {Object} item - 数据项
+   * @returns {string|null} amazon_order_id 或 null
+   */
+  _extractAmazonOrderId(item) {
+    // 尝试多种可能的字段名
+    return item.amazon_order_id || 
+           item['amazon-order-id'] || 
+           item.amazonOrderId || 
+           item.order_id || 
+           item['order-id'] || 
+           item.orderId || 
+           null;
+  }
+
+  /**
    * 保存亚马逊报表数据到数据库
    * @param {string} accountId - 领星账户ID
    * @param {string} reportType - 报表类型
@@ -1693,20 +1711,93 @@ class LingXingAmazonService extends LingXingApiClient {
         return;
       }
 
-      for (const item of reportData) {
-        await prisma.lingXingAmazonReport.create({
-          data: {
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      // 提取所有有 amazon_order_id 的数据
+      const itemsWithOrderId = reportData
+        .map(item => ({
+          item,
+          amazonOrderId: this._extractAmazonOrderId(item)
+        }))
+        .filter(({ amazonOrderId }) => amazonOrderId !== null);
+
+      // 批量查询已存在的记录（用于统计）
+      let existingOrderIds = new Set();
+      if (itemsWithOrderId.length > 0) {
+        const amazonOrderIds = itemsWithOrderId.map(({ amazonOrderId }) => amazonOrderId);
+        const existingRecords = await prisma.lingXingAmazonReport.findMany({
+          where: {
             accountId: accountId,
             reportType: reportType,
-            sid: sid ? parseInt(sid) : (item.sid ? parseInt(item.sid) : null),
-            data: item
+            amazonOrderId: {
+              in: amazonOrderIds
+            }
+          },
+          select: {
+            amazonOrderId: true
+          }
+        });
+        existingRecords.forEach(record => {
+          if (record.amazonOrderId) {
+            existingOrderIds.add(record.amazonOrderId);
           }
         });
       }
 
-      console.log(`${reportType}报表数据已保存到数据库: 共 ${reportData.length} 条记录`);
+      // 处理每条数据
+      for (const reportItem of reportData) {
+        const amazonOrderId = this._extractAmazonOrderId(reportItem);
+        const itemSid = sid ? parseInt(sid) : (reportItem.sid ? parseInt(reportItem.sid) : null);
+
+        if (amazonOrderId) {
+          // 使用 upsert：如果存在则更新，不存在则创建
+          await prisma.lingXingAmazonReport.upsert({
+            where: {
+              accountId_reportType_amazonOrderId: {
+                accountId: accountId,
+                reportType: reportType,
+                amazonOrderId: amazonOrderId
+              }
+            },
+            update: {
+              sid: itemSid,
+              data: reportItem
+            },
+            create: {
+              accountId: accountId,
+              reportType: reportType,
+              sid: itemSid,
+              amazonOrderId: amazonOrderId,
+              data: reportItem
+            }
+          });
+
+          // 统计：如果之前存在则是更新，否则是创建
+          if (existingOrderIds.has(amazonOrderId)) {
+            updatedCount++;
+          } else {
+            createdCount++;
+            existingOrderIds.add(amazonOrderId); // 添加到集合中，避免重复统计
+          }
+        } else {
+          // 如果没有 amazon_order_id，则直接创建（可能是其他类型的报表数据）
+          await prisma.lingXingAmazonReport.create({
+            data: {
+              accountId: accountId,
+              reportType: reportType,
+              sid: itemSid,
+              data: reportItem
+            }
+          });
+          createdCount++;
+        }
+      }
+
+      console.log(`${reportType}报表数据已保存到数据库: 新增 ${createdCount} 条，更新 ${updatedCount} 条，共 ${reportData.length} 条记录`);
     } catch (error) {
       console.error(`保存${reportType}报表数据到数据库失败:`, error.message);
+      throw error;
     }
   }
 }

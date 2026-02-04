@@ -3675,11 +3675,15 @@ class LingXingFinanceService extends LingXingApiClient {
       }
 
       for (const feeType of feeTypes) {
+        // 将 feeTypeId 转换为字符串（schema 中定义为 String）
+        const feeTypeId = feeType.id || feeType.fee_type_id;
+        const feeTypeIdStr = feeTypeId !== undefined && feeTypeId !== null ? String(feeTypeId) : '';
+
         await prisma.lingXingFeeType.upsert({
           where: {
             accountId_feeTypeId: {
               accountId: accountId,
-              feeTypeId: feeType.id || feeType.fee_type_id || ''
+              feeTypeId: feeTypeIdStr
             }
           },
           update: {
@@ -3689,7 +3693,7 @@ class LingXingFinanceService extends LingXingApiClient {
           },
           create: {
             accountId: accountId,
-            feeTypeId: feeType.id || feeType.fee_type_id || '',
+            feeTypeId: feeTypeIdStr,
             feeTypeName: feeType.name || feeType.fee_type_name || null,
             data: feeType
           }
