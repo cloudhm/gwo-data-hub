@@ -251,6 +251,62 @@ class LingXingApiClient {
   }
 
   /**
+   * 生成 curl 格式的命令（用于调试）
+   * @param {string} method - HTTP方法
+   * @param {string} url - 完整URL
+   * @param {Object} queryParams - 查询参数
+   * @param {Object} bodyData - 请求体数据
+   * @param {Object} headers - 请求头
+   * @returns {string} curl 命令字符串
+   */
+  generateCurlCommand(url, method, queryParams = {}, bodyData = null, headers = {}) {
+    const methodUpper = method.toUpperCase();
+    let curlCmd = `curl -X ${methodUpper}`;
+
+    // 添加请求头
+    const allHeaders = {
+      'Content-Type': 'application/json',
+      ...headers
+    };
+    for (const [key, value] of Object.entries(allHeaders)) {
+      curlCmd += ` \\\n  -H '${key}: ${value}'`;
+    }
+
+    // 构建查询字符串
+    const queryString = Object.entries(queryParams)
+      .filter(([_, value]) => value !== undefined && value !== null && value !== '')
+      .map(([key, value]) => {
+        let valueStr;
+        if (Array.isArray(value)) {
+          valueStr = JSON.stringify(value);
+        } else if (typeof value === 'object') {
+          valueStr = JSON.stringify(value);
+        } else {
+          valueStr = String(value);
+        }
+        return `${encodeURIComponent(key)}=${encodeURIComponent(valueStr)}`;
+      })
+      .join('&');
+
+    // 添加URL和查询参数
+    if (queryString) {
+      curlCmd += ` \\\n  '${url}?${queryString}'`;
+    } else {
+      curlCmd += ` \\\n  '${url}'`;
+    }
+
+    // 添加请求体（POST/PUT/DELETE）
+    if (bodyData && (methodUpper === 'POST' || methodUpper === 'PUT' || methodUpper === 'DELETE')) {
+      const bodyStr = JSON.stringify(bodyData);
+      // 使用单引号包裹，并转义内部的单引号
+      const escapedBody = bodyStr.replace(/'/g, "'\\''");
+      curlCmd += ` \\\n  -d '${escapedBody}'`;
+    }
+
+    return curlCmd;
+  }
+
+  /**
    * 通用API调用方法
    * @param {Object} account - 领星账户信息
    * @param {string} method - HTTP方法 (GET, POST, PUT, DELETE)
@@ -266,13 +322,14 @@ class LingXingApiClient {
   async callApi(account, method, path, params = {}, options = {}) {
     const {
       retryCount = 0,
-      maxRetries = 2,
+      maxRetries = 5,
       successCode = [0, 200, '200'],
       skipRateLimit = false
     } = options;
 
     const fullUrl = `${this.baseURL}${path}`;
     let requestId = null;
+    let requestConfig = null; // 保存请求配置，用于错误时生成curl命令
 
     try {
       // 限流：尝试获取令牌
@@ -318,6 +375,13 @@ class LingXingApiClient {
           ...allParams,
           sign: sign
         };
+        requestConfig = {
+          method: method,
+          url: fullUrl,
+          queryParams: config.params,
+          bodyData: null,
+          headers: config.headers
+        };
       } else {
         // POST/PUT/DELETE 请求：
         // - 查询参数：只包含公共参数（access_token、app_key、timestamp、sign）
@@ -329,6 +393,13 @@ class LingXingApiClient {
           sign: sign
         };
         config.data = params; // 只包含业务参数
+        requestConfig = {
+          method: method,
+          url: fullUrl,
+          queryParams: config.params,
+          bodyData: config.data,
+          headers: config.headers
+        };
       }
 
       const response = await axios(config);
@@ -343,9 +414,16 @@ class LingXingApiClient {
         // 如果是限流错误码，释放令牌
         if (responseCode === '3001008' || responseCode === 3001008) {
           if (requestId) {
-            rateLimiter.releaseToken(store.apiKey, fullUrl, requestId);
+            rateLimiter.releaseToken(account.appId, fullUrl, requestId);
           }
         }
+
+        // 打印完整响应，便于调试
+        console.error('=== API响应错误 ===');
+        console.error('HTTP状态码:', response.status);
+        console.error('错误码:', responseCode);
+        console.error('完整响应数据:', JSON.stringify(response.data, null, 2));
+        console.error('==================');
 
         const errorCode = String(responseCode);
         const error = createError(errorCode);
@@ -386,6 +464,39 @@ class LingXingApiClient {
         });
       }
 
+      // 生成并打印 curl 格式的请求命令
+      if (requestConfig) {
+        try {
+          const curlCommand = this.generateCurlCommand(
+            requestConfig.url,
+            requestConfig.method,
+            requestConfig.queryParams,
+            requestConfig.bodyData,
+            requestConfig.headers
+          );
+          console.error('\n=== 请求信息 (curl格式) ===');
+          console.error(curlCommand);
+          console.error('===========================\n');
+        } catch (curlError) {
+          console.error('生成curl命令失败:', curlError.message);
+        }
+      } else {
+        // 如果请求配置不存在（可能在获取token之前就失败了），尝试生成基本信息
+        try {
+          console.error('\n=== 请求信息 ===');
+          console.error(`方法: ${method}`);
+          console.error(`URL: ${fullUrl}`);
+          console.error(`路径: ${path}`);
+          console.error(`业务参数:`, JSON.stringify(params, null, 2));
+          console.error('===========================\n');
+        } catch (infoError) {
+          // 忽略
+        }
+      }
+      
+      
+
+
       // 处理axios错误响应
       if (error.response && error.response.data) {
         const errorCode = String(error.response.data.code || error.code || '');
@@ -419,10 +530,14 @@ class LingXingApiClient {
         rateLimiter.releaseToken(account.appId, fullUrl, requestId);
       }
 
-      console.error('调用领星ERP API失败:', error.message);
+
       if (error.response) {
         console.error('响应数据:', error.response.data);
       }
+      
+      console.error('调用领星ERP API失败:', error.message);
+      
+      
 
       throw error;
     }

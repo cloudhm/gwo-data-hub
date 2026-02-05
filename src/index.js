@@ -9,6 +9,8 @@ import lingxingRoutes from './routes/lingxing/lingxingRoutes.js';
 console.log('[5] lingxingRoutes 导入完成');
 import lingxingBasicRoutes from './routes/lingxing/lingxingBasicRoutes.js';
 console.log('[6] lingxingBasicRoutes 导入完成');
+import lingxingVcRoutes from './routes/lingxing/lingxingVcRoutes.js';
+console.log('[6.5] lingxingVcRoutes 导入完成');
 import lingxingProductRoutes from './routes/lingxing/lingxingProductRoutes.js';
 console.log('[7] lingxingProductRoutes 导入完成');
 import lingxingSalesRoutes from './routes/lingxing/lingxingSalesRoutes.js';
@@ -70,6 +72,8 @@ const start = async () => {
     console.log('[24] lingxingRoutes 注册完成');
     await fastify.register(lingxingBasicRoutes, { prefix: '/api/lingxing/basic' });
     console.log('[25] lingxingBasicRoutes 注册完成');
+    await fastify.register(lingxingVcRoutes, { prefix: '/api/lingxing/vc' });
+    console.log('[25.5] lingxingVcRoutes 注册完成');
     await fastify.register(lingxingProductRoutes, { prefix: '/api/lingxing/products' });
     console.log('[26] lingxingProductRoutes 注册完成');
     await fastify.register(lingxingSalesRoutes, { prefix: '/api/lingxing/sales' });
@@ -116,6 +120,7 @@ const start = async () => {
     console.log(`   - 亚马逊: http://localhost:${PORT}/api/amazon`);
     console.log(`   - 领星ERP: http://localhost:${PORT}/api/lingxing`);
     console.log(`   - 领星基础数据: http://localhost:${PORT}/api/lingxing/basic`);
+    console.log(`   - 领星VC管理: http://localhost:${PORT}/api/lingxing/vc`);
     console.log(`   - 领星产品管理: http://localhost:${PORT}/api/lingxing/products`);
     console.log(`   - 领星销售管理: http://localhost:${PORT}/api/lingxing/sales`);
     console.log(`   - 领星采购管理: http://localhost:${PORT}/api/lingxing/purchase`);

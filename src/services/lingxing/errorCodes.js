@@ -63,6 +63,18 @@ const ErrorCodesMap = {
   },
   
   // 请求参数错误
+  '400': {
+    code: '400',
+    message: '参数有误',
+    description: '请求参数有误，请检查参数格式和值',
+    action: '检查请求参数是否正确，查看error_details获取详细信息'
+  },
+  '500': {
+    code: '500',
+    message: '内部错误',
+    description: '服务器内部错误，可能是系统异常或配置问题',
+    action: '查看error_details获取详细错误信息，如问题持续存在请联系技术支持'
+  },
   '3001001': {
     code: '3001001',
     message: '缺少必传参数',
@@ -81,7 +93,7 @@ const ErrorCodesMap = {
     description: '接口请求太频繁触发限流，适当下调接口请求频率',
     action: '降低请求频率，稍后重试',
     shouldRetry: true,
-    retryAfter: 1000 // 1秒后重试
+    retryAfter: 2000 // 2秒后重试
   }
 };
 
