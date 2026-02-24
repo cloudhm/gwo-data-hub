@@ -38,7 +38,10 @@ class RateLimiter {
       '/basicOpen/finance/requestFundsPool/otherFee/list': 1,
       '/bd/sp/api/open/monthly/receivable/report/list': 1,
       '/bd/sp/api/open/monthly/receivable/report/list/detail': 1,
-      '/bd/sp/api/open/monthly/receivable/report/list/detail/info': 1
+      '/bd/sp/api/open/monthly/receivable/report/list/detail/info': 1,
+      '/erp/sc/data/sales_report/asinDailyLists': 5,
+      '/bd/productPerformance/openApi/asinList': 1,
+      '/bd/profit/statistics/open/msku/list': 10
     };
     
     // 请求超时时间（2分钟）

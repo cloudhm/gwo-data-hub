@@ -220,6 +220,8 @@ model LingXingAccount {
   sellerProfitReports LingXingSellerProfitReport[]
   // 关联的FBA成本流（一个账户下可以有多个FBA成本流）
   fbaCostStreams LingXingFbaCostStream[]
+  // 关联的广告发票（一个账户下可以有多个广告发票）
+  adsInvoices LingXingAdsInvoice[]
   // 关联的请款单（一个账户下可以有多个请款单）
   requestFundsOrders LingXingRequestFundsOrder[]
   // 关联的请款池-货款现结（一个账户下可以有多个请款池-货款现结）
@@ -240,6 +242,12 @@ model LingXingAccount {
   receivableReportDetails LingXingReceivableReportDetail[]
   // 关联的亚马逊报表数据（一个账户下可以有多个报表数据）
   amazonReports LingXingAmazonReport[]
+  // 关联的销量报表（一个账户下可以有多个销量报表）
+  salesReports LingXingSalesReport[]
+  // 关联的产品表现数据（一个账户下可以有多个产品表现记录）
+  productPerformance LingXingProductPerformance[]
+  // 关联的利润统计MSKU数据（一个账户下可以有多个利润统计记录）
+  mskuProfitStatistics LingXingMskuProfitStatistics[]
   
   @@index([appId])
   @@index([isActive])
@@ -2272,6 +2280,22 @@ model LingXingRequestFundsPoolInbound {
   @@map("ods_lingxing_request_funds_pool_inbounds")
 }
 
+// 领星ERP财务管理 - 广告发票
+model LingXingAdsInvoice {
+  id          String   @id @default(uuid())
+  accountId   String   // 关联的领星账户ID
+  invoiceId   String?  // 发票ID（如果有唯一标识）
+  data        Json?    // 完整的数据
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  account     LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([accountId])
+  @@index([invoiceId])
+  @@map("ods_lingxing_ads_invoices")
+}
+
 // 领星ERP财务管理 - 请款池-货款预付款
 model LingXingRequestFundsPoolPrepay {
   id          String   @id @default(uuid())
@@ -2399,4 +2423,160 @@ model LingXingAmazonReport {
   @@index([amazonOrderId])
   @@index([createdAt])
   @@map("ods_lingxing_amazon_reports")
+}
+
+// 领星ERP销量报表主表（存储报表汇总信息）
+model LingXingSalesReport {
+  id            String   @id @default(uuid())
+  accountId     String   // 关联的领星账户ID
+  sid           Int      // 店铺ID
+  eventDate     String   // 报表日期【站点时间】，格式：Y-m-d
+  asinType      Int      // 查询维度：1=asin, 2=msku
+  type          Int      // 类型：1=销售额, 2=销量, 3=订单量
+  totalRecords  Int?     // 总记录数
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  account       LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  items         LingXingSalesReportItem[] // 关联的明细数据
+  
+  @@unique([sid, eventDate, asinType, type], name: "sid_eventDate_asinType_type")
+  @@index([accountId])
+  @@index([sid])
+  @@index([eventDate])
+  @@index([asinType])
+  @@index([type])
+  @@index([createdAt])
+  @@map("ods_lingxing_sales_reports")
+}
+
+// 领星ERP销量报表明细表（存储每条报表数据）
+model LingXingSalesReportItem {
+  id            String   @id @default(uuid())
+  reportId      String   // 关联的主表ID
+  sid           Int?     // 店铺ID（冗余字段，便于查询）
+  rDate         String?  // 报表日期【站点时间】（冗余字段）
+  currencyCode  String?  // 币种
+  sellerSku     String?  // MSKU
+  asin          String?  // ASIN
+  productName   String?  @db.Text // 品名
+  mapValue      Decimal? @db.Decimal(15, 2) // 统计量（根据type不同，可能是销售额、销量或订单量）
+  data          Json?    // 完整的数据
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  report        LingXingSalesReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  // 唯一键：reportId + (asin 或 sellerSku)，使用 COALESCE 确保至少有一个有值
+  // 注意：Prisma 不支持在唯一键中使用函数，所以我们需要确保在应用层处理
+  // 这里使用 reportId + asin + sellerSku 的组合，其中 asin 和 sellerSku 至少有一个不为空
+  @@unique([reportId, asin, sellerSku], name: "reportId_asin_sellerSku")
+  @@index([reportId])
+  @@index([sid])
+  @@index([rDate])
+  @@index([asin])
+  @@index([sellerSku])
+  @@index([createdAt])
+  @@map("ods_lingxing_sales_report_items")
+}
+
+// 领星ERP产品表现主表（记录每次查询条件）
+model LingXingProductPerformance {
+  id                String   @id @default(uuid())
+  accountId         String   // 关联的领星账户ID
+  sidString         String   // 店铺ID字符串（用于存储多个sid，作为唯一键的一部分）
+  startDate         String   // 开始日期，格式：YYYY-MM-DD
+  endDate           String   // 结束日期，格式：YYYY-MM-DD
+  summaryField      String   // 汇总行维度：asin/parent_asin/msku/sku
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  account           LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  pages             LingXingProductPerformancePage[] // 关联的分页数据
+  
+  // 唯一键：accountId + sidString + startDate + endDate + summaryField
+  @@unique([accountId, sidString, startDate, endDate, summaryField], name: "accountId_sidString_startDate_endDate_summaryField")
+  @@index([accountId])
+  @@index([sidString])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([summaryField])
+  @@index([createdAt])
+  @@map("ods_lingxing_product_performance")
+}
+
+// 领星ERP产品表现分页数据表（存储每页的完整JSON数据）
+model LingXingProductPerformancePage {
+  id                String   @id @default(uuid())
+  performanceId     String   // 关联的主表ID
+  pageOffset        Int      // 页码偏移量（offset）
+  pageLength        Int      // 每页长度（length）
+  pageNumber        Int      // 页码（从0开始，pageOffset / pageLength）
+  total             Int?     // 该页的总记录数
+  data              Json     // 完整的分页数据（包含list数组和chain_start_date等）
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  performance       LingXingProductPerformance @relation(fields: [performanceId], references: [id], onDelete: Cascade)
+  
+  // 唯一键：performanceId + pageNumber（根据主表ID和页码确定唯一性）
+  @@unique([performanceId, pageNumber], name: "performanceId_pageNumber")
+  @@index([performanceId])
+  @@index([pageNumber])
+  @@index([pageOffset])
+  @@index([createdAt])
+  @@map("ods_lingxing_product_performance_pages")
+}
+
+// 领星ERP利润统计MSKU主表（存储查询参数）
+model LingXingMskuProfitStatistics {
+  id            String   @id @default(uuid())
+  accountId     String   // 关联的领星账户ID
+  sidString     String   // 店铺ID字符串（用于存储多个sid，作为唯一键的一部分）
+  startDate     String   // 开始日期，格式：YYYY-MM-DD
+  endDate       String   // 结束日期，格式：YYYY-MM-DD
+  currencyCode  String?  // 币种code（可选）
+  mids          Json?    // 站点id数组
+  sids          Json?    // 店铺id数组
+  searchField   String?  // 搜索值类型：msku
+  searchValue   Json?    // 搜索值数组
+  totalRecords  Int?     // 总记录数
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  account       LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  items         LingXingMskuProfitStatisticsItem[] // 关联的明细数据
+  
+  // 唯一键：accountId + sidString + startDate + endDate + currencyCode
+  @@unique([accountId, sidString, startDate, endDate, currencyCode], name: "accountId_sidString_startDate_endDate_currencyCode")
+  @@index([accountId])
+  @@index([sidString])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([currencyCode])
+  @@map("ods_lingxing_msku_profit_statistics")
+}
+
+// 领星ERP利润统计MSKU明细表（存储每条记录）
+model LingXingMskuProfitStatisticsItem {
+  id            String   @id @default(uuid())
+  statisticsId String   // 关联的主表ID
+  msku          String?  // MSKU
+  asin          String?  // ASIN
+  sid           Int?     // 店铺ID
+  dataDate      String?  // 日期，格式：YYYY-MM-DD
+  data          Json?    // 完整的数据（包含所有字段）
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  statistics    LingXingMskuProfitStatistics @relation(fields: [statisticsId], references: [id], onDelete: Cascade)
+  
+  // 唯一键：statisticsId + msku + sid + dataDate
+  @@unique([statisticsId, msku, sid, dataDate], name: "statisticsId_msku_sid_dataDate")
+  @@index([statisticsId])
+  @@index([msku])
+  @@index([asin])
+  @@index([sid])
+  @@index([dataDate])
+  @@map("ods_lingxing_msku_profit_statistics_items")
 }
