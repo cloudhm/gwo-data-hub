@@ -6,9 +6,9 @@ const CRON_EXPRESSION = '0 1,7 * * *'; // 每天1点/7点执行
 
 /**
  * 增量同步子任务列表（与 lingXingUnifiedSyncService.INCREMENTAL_TASK_REGISTRY 一致）
- * [ taskType, 中文描述 ]
+ * [ taskType, 中文描述 ]，供 task-status 接口展示完整任务列表
  */
-const SYNC_TASKS = [
+export const SYNC_TASKS = [
   ['allOrders', '所有订单'],
   ['fbaOrders', 'FBA订单'],
   ['fbaExchangeOrders', 'FBA换货订单'],
