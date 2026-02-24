@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP仓库服务
@@ -4141,6 +4142,45 @@ class LingXingWarehouseService extends LingXingApiClient {
     } catch (error) {
       console.error('保存仓位库存明细列表到数据库失败:', error.message);
     }
+  }
+
+  /**
+   * 收货单增量同步（优先按更新时间 date_type: 4）
+   */
+  async incrementalSyncPurchaseReceiptOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseReceiptOrder',
+      { ...options, extraParams: { date_type: options.date_type ?? 4 } },
+      async (id, params, opts) => this.fetchAllPurchaseReceiptOrders(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 入库单增量同步（优先按更新时间 search_field_time: increment_time）
+   */
+  async incrementalSyncInboundOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'inboundOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'increment_time' } },
+      async (id, params, opts) => this.fetchAllInboundOrders(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 出库单增量同步（优先按更新时间 search_field_time: increment_time）
+   */
+  async incrementalSyncOutboundOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'outboundOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'increment_time' } },
+      async (id, params, opts) => this.fetchAllOutboundOrders(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 }
 

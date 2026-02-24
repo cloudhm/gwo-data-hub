@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP财务管理服务
@@ -4236,6 +4237,33 @@ class LingXingFinanceService extends LingXingApiClient {
       console.error('保存应收报告详情到数据库失败:', error.message);
     }
   }
+
+  /**
+   * 费用明细增量同步（优先按创建时间 date_type: gmt_create）
+   */
+  async incrementalSyncFeeDetails(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'feeDetail',
+      { ...options, extraParams: { date_type: options.date_type || 'gmt_create' } },
+      async (id, params, opts) => this.fetchAllFeeDetails(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 请款单增量同步（支持 search_field_time，不传则用接口默认；时间间隔最长 90 天）
+   */
+  async incrementalSyncRequestFundsOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'requestFundsOrder',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 7, 90), ...options, extraParams: { search_field_time: options.search_field_time } },
+      async (id, params, opts) => this.fetchAllRequestFundsOrders(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
 }
 
 export default new LingXingFinanceService();

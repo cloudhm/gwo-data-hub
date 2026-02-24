@@ -90,6 +90,112 @@ async function lingxingAmazonRoutes(fastify, options) {
   });
 
   /**
+   * getAllOrdersReport 增量同步（按上次同步结束日期拉取每个店铺的订单增量）
+   * POST /api/lingxing/amazon/all-orders/incremental-sync/:accountId
+   * Body: {
+   *   endDate: "2025-02-23",       // 可选，同步截止日期 Y-m-d，不传则到昨天
+   *   defaultLookbackDays: 7,     // 可选，无历史状态时回溯天数
+   *   timezone: "Asia/Shanghai",  // 可选
+   *   date_type: 1,               // 可选，1=下单日期 2=订单更新时间
+   *   pageSize: 1000,
+   *   delayBetweenPages: 500,
+   *   delayBetweenShops: 500
+   * }
+   */
+  fastify.post('/all-orders/incremental-sync/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+
+    try {
+      const result = await lingxingAmazonService.incrementalSyncAllOrdersReport(accountId, body);
+
+      return {
+        success: true,
+        message: '所有订单增量同步执行完成',
+        data: result.results,
+        summary: result.summary
+      };
+    } catch (error) {
+      fastify.log.error('所有订单增量同步错误:', error);
+
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '所有订单增量同步失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 通用增量同步（按 taskType 分发到对应报表的增量同步方法）
+   * POST /api/lingxing/amazon/incremental-sync/:accountId
+   * Body: {
+   *   taskType: "fbaOrders" | "fbaExchangeOrders" | "fbaRefundOrders" | "fbmReturnOrders" | "removalOrders" | "removalShipment" | "transaction" | "amazonFulfilledShipments" | "fbaInventoryEventDetail" | "adjustmentList",
+   *   endDate?: "Y-m-d",
+   *   defaultLookbackDays?: number,
+   *   timezone?: string,
+   *   date_type?: number,
+   *   pageSize?: number,
+   *   delayBetweenPages?: number,
+   *   delayBetweenShops?: number
+   * }
+   */
+  fastify.post('/incremental-sync/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { taskType, ...options } = body;
+
+    if (!taskType) {
+      return reply.code(400).send({
+        success: false,
+        message: '请提供 body.taskType，可选: fbaOrders, fbaExchangeOrders, fbaRefundOrders, fbmReturnOrders, removalOrders, removalShipment, transaction, amazonFulfilledShipments, fbaInventoryEventDetail, adjustmentList'
+      });
+    }
+
+    const methodMap = {
+      fbaOrders: 'incrementalSyncFbaOrdersReport',
+      fbaExchangeOrders: 'incrementalSyncFbaExchangeOrdersReport',
+      fbaRefundOrders: 'incrementalSyncFbaRefundOrdersReport',
+      fbmReturnOrders: 'incrementalSyncFbmReturnOrdersReport',
+      removalOrders: 'incrementalSyncRemovalOrdersReport',
+      removalShipment: 'incrementalSyncRemovalShipmentReport',
+      transaction: 'incrementalSyncTransactionReport',
+      amazonFulfilledShipments: 'incrementalSyncAmazonFulfilledShipmentsReport',
+      fbaInventoryEventDetail: 'incrementalSyncFbaInventoryEventDetailReport',
+      adjustmentList: 'incrementalSyncAdjustmentListReport'
+    };
+
+    const methodName = methodMap[taskType];
+    if (!methodName || typeof lingxingAmazonService[methodName] !== 'function') {
+      return reply.code(400).send({
+        success: false,
+        message: `不支持的 taskType: ${taskType}，可选: ${Object.keys(methodMap).join(', ')}`
+      });
+    }
+
+    try {
+      const result = await lingxingAmazonService[methodName](accountId, options);
+      return {
+        success: true,
+        message: `${taskType} 增量同步执行完成`,
+        data: result.results,
+        summary: result.summary
+      };
+    } catch (error) {
+      fastify.log.error(`${taskType} 增量同步错误:`, error);
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || `${taskType} 增量同步失败`,
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
    * 查询亚马逊源报表-FBA订单
    * 查询 Amazon-Fulfilled Shipments Report 报表
    * POST /api/lingxing/amazon/fba-orders/:accountId

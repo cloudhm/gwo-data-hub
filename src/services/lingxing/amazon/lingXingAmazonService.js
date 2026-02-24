@@ -1,5 +1,8 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import lingXingSyncStateService from '../sync/lingXingSyncStateService.js';
+
+const LOG_PREFIX = '[IncrementalSync]';
 
 /**
  * 领星ERP亚马逊原表数据服务
@@ -1270,6 +1273,672 @@ class LingXingAmazonService extends LingXingApiClient {
       console.error('自动拉取所有订单数据失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * getAllOrdersReport 的增量同步方法
+   * 按「上次同步结束日期」拉取每个店铺的订单增量，并更新同步状态，便于每日/定时只同步新数据
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} options - 选项
+   *   - endDate: string Y-m-d，同步截止日期，不传则到「昨天」
+   *   - defaultLookbackDays: number 无历史状态时向前取多少天（默认 7）
+   *   - timezone: string 计算「昨天」的时区（默认 'Asia/Shanghai'）
+   *   - date_type: number 1=下单日期，2=亚马逊订单更新时间（默认 1）
+   *   - pageSize: number 每页条数（默认 1000）
+   *   - delayBetweenPages: number 分页间延迟 ms（默认 500）
+   *   - delayBetweenShops: number 店铺间延迟 ms（默认 500）
+   * @returns {Promise<{ results: Array<{ sid, success, recordCount, start_date, end_date, error? }>, summary: { totalShops, successCount, failCount, totalRecords } }>}
+   */
+  async incrementalSyncAllOrdersReport(accountId, options = {}) {
+    const {
+      endDate = null,
+      defaultLookbackDays = 7,
+      timezone = 'Asia/Shanghai',
+      date_type = 1,
+      pageSize = 1000,
+      delayBetweenPages = 500,
+      delayBetweenShops = 500
+    } = options;
+
+    const syncState = lingXingSyncStateService;
+    const taskType = 'allOrders';
+
+    console.log(`${LOG_PREFIX} [allOrders] 开始 accountId=${accountId} endDate=${endDate ?? '(昨天)'} defaultLookbackDays=${defaultLookbackDays} date_type=${date_type}`);
+
+    const sellers = await prisma.lingXingSeller.findMany({
+      where: { accountId, status: 1 },
+      select: { sid: true },
+      orderBy: { sid: 'asc' }
+    });
+    const sids = sellers.map(s => s.sid).filter(Boolean);
+
+    if (sids.length === 0) {
+      console.warn(`${LOG_PREFIX} [allOrders] accountId=${accountId} 无正常状态店铺，跳过`);
+      return {
+        results: [],
+        summary: { totalShops: 0, successCount: 0, failCount: 0, totalRecords: 0, message: '该账户下无正常状态店铺' }
+      };
+    }
+
+    console.log(`${LOG_PREFIX} [allOrders] accountId=${accountId} 共 ${sids.length} 个店铺: [${sids.join(', ')}]`);
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+    let totalRecords = 0;
+
+    for (let i = 0; i < sids.length; i++) {
+      const sid = sids[i];
+      const dateRange = await syncState.getIncrementalDateRange(accountId, taskType, sid, {
+        defaultLookbackDays,
+        endDate,
+        timezone
+      });
+
+      if (dateRange.isEmpty) {
+        console.log(`${LOG_PREFIX} [allOrders] accountId=${accountId} sid=${sid} 日期范围为空，跳过`);
+        results.push({ sid, success: true, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, skipped: true });
+        successCount++;
+        if (i < sids.length - 1 && delayBetweenShops > 0) {
+          await new Promise(r => setTimeout(r, delayBetweenShops));
+        }
+        continue;
+      }
+
+      try {
+        console.log(`${LOG_PREFIX} [allOrders] accountId=${accountId} sid=${sid} 拉取 ${dateRange.start_date} ~ ${dateRange.end_date} ...`);
+        const fetchResult = await this.fetchAllOrdersReport(accountId, {
+          sid,
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date,
+          date_type
+        }, { pageSize, delayBetweenPages });
+
+        const recordCount = fetchResult?.total ?? 0;
+        totalRecords += recordCount;
+
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: dateRange.end_date,
+          lastSyncAt: new Date(),
+          lastRecordCount: recordCount,
+          lastStatus: 'success',
+          lastErrorMessage: null
+        });
+
+        console.log(`${LOG_PREFIX} [allOrders] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        results.push({
+          sid,
+          success: true,
+          recordCount,
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date
+        });
+        successCount++;
+      } catch (err) {
+        const message = err?.message || String(err);
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: null,
+          lastSyncAt: new Date(),
+          lastRecordCount: null,
+          lastStatus: 'failed',
+          lastErrorMessage: message
+        }).catch(() => {});
+
+        console.error(`${LOG_PREFIX} [allOrders] accountId=${accountId} sid=${sid} 失败 ${dateRange.start_date}~${dateRange.end_date} error=${message}`);
+        results.push({
+          sid,
+          success: false,
+          recordCount: 0,
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date,
+          error: message
+        });
+        failCount++;
+      }
+
+      if (i < sids.length - 1 && delayBetweenShops > 0) {
+        await new Promise(r => setTimeout(r, delayBetweenShops));
+      }
+    }
+
+    console.log(`${LOG_PREFIX} [allOrders] 结束 accountId=${accountId} 店铺=${sids.length} 成功=${successCount} 失败=${failCount} 总条数=${totalRecords}`);
+    return {
+      results,
+      summary: {
+        totalShops: sids.length,
+        successCount,
+        failCount,
+        totalRecords
+      }
+    };
+  }
+
+  /**
+   * 按店铺维度的增量同步通用方法（内部使用）
+   * 适用于所有「sid + start_date + end_date」的报表接口
+   * @private
+   */
+  async _incrementalSyncReportBySid(accountId, taskType, fetchAllFn, options = {}) {
+    const {
+      endDate = null,
+      defaultLookbackDays = 7,
+      timezone = 'Asia/Shanghai',
+      delayBetweenShops = 500,
+      pageSize = 1000,
+      delayBetweenPages = 500,
+      extraParams = {}
+    } = options;
+
+    const syncState = lingXingSyncStateService;
+    console.log(`${LOG_PREFIX} [${taskType}] 开始 accountId=${accountId} endDate=${endDate ?? '(昨天)'} defaultLookbackDays=${defaultLookbackDays}`);
+
+    const sellers = await prisma.lingXingSeller.findMany({
+      where: { accountId, status: 1 },
+      select: { sid: true },
+      orderBy: { sid: 'asc' }
+    });
+    const sids = sellers.map(s => s.sid).filter(Boolean);
+
+    if (sids.length === 0) {
+      console.warn(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 无正常状态店铺，跳过`);
+      return {
+        results: [],
+        summary: { totalShops: 0, successCount: 0, failCount: 0, totalRecords: 0, message: '该账户下无正常状态店铺' }
+      };
+    }
+
+    console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 共 ${sids.length} 个店铺: [${sids.join(', ')}]`);
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+    let totalRecords = 0;
+
+    for (let i = 0; i < sids.length; i++) {
+      const sid = sids[i];
+      const dateRange = await syncState.getIncrementalDateRange(accountId, taskType, sid, {
+        defaultLookbackDays,
+        endDate,
+        timezone
+      });
+
+      if (dateRange.isEmpty) {
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 日期范围为空，跳过`);
+        results.push({ sid, success: true, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, skipped: true });
+        successCount++;
+        if (i < sids.length - 1 && delayBetweenShops > 0) {
+          await new Promise(r => setTimeout(r, delayBetweenShops));
+        }
+        continue;
+      }
+
+      try {
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 拉取 ${dateRange.start_date} ~ ${dateRange.end_date} ...`);
+        const filterParams = {
+          sid,
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date,
+          ...extraParams
+        };
+        const fetchResult = await fetchAllFn(accountId, filterParams, { pageSize, delayBetweenPages });
+        const recordCount = fetchResult?.total ?? fetchResult?.data?.length ?? fetchResult?.orders?.length ?? 0;
+        totalRecords += recordCount;
+
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: dateRange.end_date,
+          lastSyncAt: new Date(),
+          lastRecordCount: recordCount,
+          lastStatus: 'success',
+          lastErrorMessage: null
+        });
+
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        results.push({
+          sid,
+          success: true,
+          recordCount,
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date
+        });
+        successCount++;
+      } catch (err) {
+        const message = err?.message || String(err);
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: null,
+          lastSyncAt: new Date(),
+          lastRecordCount: null,
+          lastStatus: 'failed',
+          lastErrorMessage: message
+        }).catch(() => {});
+
+        console.error(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 失败 ${dateRange.start_date}~${dateRange.end_date} error=${message}`);
+        results.push({
+          sid,
+          success: false,
+          recordCount: 0,
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date,
+          error: message
+        });
+        failCount++;
+      }
+
+      if (i < sids.length - 1 && delayBetweenShops > 0) {
+        await new Promise(r => setTimeout(r, delayBetweenShops));
+      }
+    }
+
+    console.log(`${LOG_PREFIX} [${taskType}] 结束 accountId=${accountId} 店铺=${sids.length} 成功=${successCount} 失败=${failCount} 总条数=${totalRecords}`);
+    return {
+      results,
+      summary: {
+        totalShops: sids.length,
+        successCount,
+        failCount,
+        totalRecords
+      }
+    };
+  }
+
+  /**
+   * FBA 订单报表增量同步
+   */
+  async incrementalSyncFbaOrdersReport(accountId, options = {}) {
+    return this._incrementalSyncReportBySid(
+      accountId,
+      'fbaOrders',
+      (id, params, opts) => this.fetchAllFbaOrdersReport(id, params, opts),
+      { ...options, extraParams: { date_type: options.date_type ?? 1 } }
+    );
+  }
+
+  /**
+   * FBA 换货订单报表增量同步
+   */
+  async incrementalSyncFbaExchangeOrdersReport(accountId, options = {}) {
+    return this._incrementalSyncReportBySid(
+      accountId,
+      'fbaExchangeOrders',
+      (id, params, opts) => this.fetchAllFbaExchangeOrdersReport(id, params, opts),
+      options
+    );
+  }
+
+  /**
+   * FBA 退货订单报表增量同步
+   */
+  async incrementalSyncFbaRefundOrdersReport(accountId, options = {}) {
+    return this._incrementalSyncReportBySid(
+      accountId,
+      'fbaRefundOrders',
+      (id, params, opts) => this.fetchAllFbaRefundOrdersReport(id, params, opts),
+      { ...options, extraParams: { date_type: options.date_type ?? 1 } }
+    );
+  }
+
+  /**
+   * FBM 退货订单报表增量同步
+   */
+  async incrementalSyncFbmReturnOrdersReport(accountId, options = {}) {
+    return this._incrementalSyncReportBySid(
+      accountId,
+      'fbmReturnOrders',
+      (id, params, opts) => this.fetchAllFbmReturnOrdersReport(id, params, opts),
+      { ...options, extraParams: { date_type: options.date_type ?? 1 } }
+    );
+  }
+
+  /**
+   * 移除订单报表增量同步
+   */
+  async incrementalSyncRemovalOrdersReport(accountId, options = {}) {
+    return this._incrementalSyncReportBySid(
+      accountId,
+      'removalOrders',
+      (id, params, opts) => this.fetchAllRemovalOrdersReportNew(id, params, opts),
+      options
+    );
+  }
+
+  /**
+   * 移除货件报表增量同步
+   */
+  async incrementalSyncRemovalShipmentReport(accountId, options = {}) {
+    return this._incrementalSyncReportBySid(
+      accountId,
+      'removalShipment',
+      (id, params, opts) => this.fetchAllRemovalShipmentReportNew(id, params, opts),
+      options
+    );
+  }
+
+  /**
+   * 交易明细报表增量同步（按 event_date 逐日拉取，使用 start_date/end_date 作为日期范围）
+   * 注意：接口按单日 event_date 查询，本方法在范围内逐日请求并汇总
+   */
+  async incrementalSyncTransactionReport(accountId, options = {}) {
+    const {
+      endDate = null,
+      defaultLookbackDays = 7,
+      timezone = 'Asia/Shanghai',
+      delayBetweenShops = 500,
+      pageSize = 1000,
+      delayBetweenPages = 500
+    } = options;
+
+    const syncState = lingXingSyncStateService;
+    const taskType = 'transaction';
+    console.log(`${LOG_PREFIX} [${taskType}] 开始 accountId=${accountId} endDate=${endDate ?? '(昨天)'} defaultLookbackDays=${defaultLookbackDays}`);
+
+    const sellers = await prisma.lingXingSeller.findMany({
+      where: { accountId, status: 1 },
+      select: { sid: true },
+      orderBy: { sid: 'asc' }
+    });
+    const sids = sellers.map(s => s.sid).filter(Boolean);
+
+    if (sids.length === 0) {
+      console.warn(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 无正常状态店铺，跳过`);
+      return {
+        results: [],
+        summary: { totalShops: 0, successCount: 0, failCount: 0, totalRecords: 0, message: '该账户下无正常状态店铺' }
+      };
+    }
+
+    console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 共 ${sids.length} 个店铺: [${sids.join(', ')}]`);
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+    let totalRecords = 0;
+
+    for (let i = 0; i < sids.length; i++) {
+      const sid = sids[i];
+      const dateRange = await syncState.getIncrementalDateRange(accountId, taskType, sid, {
+        defaultLookbackDays,
+        endDate,
+        timezone
+      });
+
+      if (dateRange.isEmpty) {
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 日期范围为空，跳过`);
+        results.push({ sid, success: true, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, skipped: true });
+        successCount++;
+        if (i < sids.length - 1 && delayBetweenShops > 0) await new Promise(r => setTimeout(r, delayBetweenShops));
+        continue;
+      }
+
+      let recordCount = 0;
+      try {
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 拉取 ${dateRange.start_date} ~ ${dateRange.end_date} (逐日) ...`);
+        const start = new Date(dateRange.start_date + 'T00:00:00Z');
+        const end = new Date(dateRange.end_date + 'T23:59:59Z');
+        for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+          const event_date = d.toISOString().slice(0, 10);
+          const pageResult = await this.getTransactionReport(accountId, { sid, event_date, offset: 0, length: pageSize });
+          const total = pageResult?.total ?? 0;
+          if (total > 0) {
+            let offset = 0;
+            const dayData = [];
+            while (offset < total) {
+              const pr = await this.getTransactionReport(accountId, { sid, event_date, offset, length: pageSize });
+              dayData.push(...(pr?.data ?? []));
+              offset += pageSize;
+              if (offset < total && delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+            }
+            if (dayData.length > 0) {
+              await this.saveAmazonReport(accountId, 'transaction', dayData, sid);
+            }
+            recordCount += dayData.length;
+          }
+          if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+        }
+
+        totalRecords += recordCount;
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: dateRange.end_date,
+          lastSyncAt: new Date(),
+          lastRecordCount: recordCount,
+          lastStatus: 'success',
+          lastErrorMessage: null
+        });
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        results.push({ sid, success: true, recordCount, start_date: dateRange.start_date, end_date: dateRange.end_date });
+        successCount++;
+      } catch (err) {
+        const message = err?.message || String(err);
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: null,
+          lastSyncAt: new Date(),
+          lastRecordCount: null,
+          lastStatus: 'failed',
+          lastErrorMessage: message
+        }).catch(() => {});
+        console.error(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 失败 ${dateRange.start_date}~${dateRange.end_date} error=${message}`);
+        results.push({ sid, success: false, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, error: message });
+        failCount++;
+      }
+
+      if (i < sids.length - 1 && delayBetweenShops > 0) await new Promise(r => setTimeout(r, delayBetweenShops));
+    }
+
+    console.log(`${LOG_PREFIX} [${taskType}] 结束 accountId=${accountId} 店铺=${sids.length} 成功=${successCount} 失败=${failCount} 总条数=${totalRecords}`);
+    return {
+      results,
+      summary: { totalShops: sids.length, successCount, failCount, totalRecords }
+    };
+  }
+
+  /**
+   * Amazon Fulfilled Shipments 报表增量同步（使用 shipment_date_after / shipment_date_before，区间最多 7 天）
+   */
+  async incrementalSyncAmazonFulfilledShipmentsReport(accountId, options = {}) {
+    const {
+      endDate = null,
+      defaultLookbackDays = 7,
+      timezone = 'Asia/Shanghai',
+      delayBetweenShops = 500,
+      pageSize = 1000,
+      delayBetweenPages = 500
+    } = options;
+
+    const syncState = lingXingSyncStateService;
+    const taskType = 'amazonFulfilledShipments';
+    console.log(`${LOG_PREFIX} [${taskType}] 开始 accountId=${accountId} endDate=${endDate ?? '(昨天)'} defaultLookbackDays=${defaultLookbackDays}`);
+
+    const sellers = await prisma.lingXingSeller.findMany({
+      where: { accountId, status: 1 },
+      select: { sid: true },
+      orderBy: { sid: 'asc' }
+    });
+    const sids = sellers.map(s => s.sid).filter(Boolean);
+
+    if (sids.length === 0) {
+      console.warn(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 无正常状态店铺，跳过`);
+      return {
+        results: [],
+        summary: { totalShops: 0, successCount: 0, failCount: 0, totalRecords: 0, message: '该账户下无正常状态店铺' }
+      };
+    }
+
+    console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 共 ${sids.length} 个店铺: [${sids.join(', ')}]`);
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+    let totalRecords = 0;
+
+    for (let i = 0; i < sids.length; i++) {
+      const sid = sids[i];
+      const dateRange = await syncState.getIncrementalDateRange(accountId, taskType, sid, {
+        defaultLookbackDays,
+        endDate,
+        timezone
+      });
+
+      if (dateRange.isEmpty) {
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 日期范围为空，跳过`);
+        results.push({ sid, success: true, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, skipped: true });
+        successCount++;
+        if (i < sids.length - 1 && delayBetweenShops > 0) await new Promise(r => setTimeout(r, delayBetweenShops));
+        continue;
+      }
+
+      try {
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 拉取 ${dateRange.start_date} ~ ${dateRange.end_date} ...`);
+        const shipment_date_after = dateRange.start_date + ' 00:00:00';
+        const shipment_date_before = dateRange.end_date + ' 23:59:59';
+        const fetchResult = await this.fetchAllAmazonFulfilledShipmentsReport(accountId, {
+          sid,
+          shipment_date_after,
+          shipment_date_before
+        }, { pageSize, delayBetweenPages });
+        const recordCount = fetchResult?.total ?? fetchResult?.data?.length ?? 0;
+        totalRecords += recordCount;
+
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: dateRange.end_date,
+          lastSyncAt: new Date(),
+          lastRecordCount: recordCount,
+          lastStatus: 'success',
+          lastErrorMessage: null
+        });
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        results.push({ sid, success: true, recordCount, start_date: dateRange.start_date, end_date: dateRange.end_date });
+        successCount++;
+      } catch (err) {
+        const message = err?.message || String(err);
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: null,
+          lastSyncAt: new Date(),
+          lastRecordCount: null,
+          lastStatus: 'failed',
+          lastErrorMessage: message
+        }).catch(() => {});
+        console.error(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 失败 ${dateRange.start_date}~${dateRange.end_date} error=${message}`);
+        results.push({ sid, success: false, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, error: message });
+        failCount++;
+      }
+
+      if (i < sids.length - 1 && delayBetweenShops > 0) await new Promise(r => setTimeout(r, delayBetweenShops));
+    }
+
+    console.log(`${LOG_PREFIX} [${taskType}] 结束 accountId=${accountId} 店铺=${sids.length} 成功=${successCount} 失败=${failCount} 总条数=${totalRecords}`);
+    return { results, summary: { totalShops: sids.length, successCount, failCount, totalRecords } };
+  }
+
+  /**
+   * FBA Inventory Event Detail 报表增量同步（使用 snapshot_date_after / snapshot_date_before，区间最多 7 天）
+   */
+  async incrementalSyncFbaInventoryEventDetailReport(accountId, options = {}) {
+    const {
+      endDate = null,
+      defaultLookbackDays = 7,
+      timezone = 'Asia/Shanghai',
+      delayBetweenShops = 500,
+      pageSize = 1000,
+      delayBetweenPages = 500
+    } = options;
+
+    const syncState = lingXingSyncStateService;
+    const taskType = 'fbaInventoryEventDetail';
+    console.log(`${LOG_PREFIX} [${taskType}] 开始 accountId=${accountId} endDate=${endDate ?? '(昨天)'} defaultLookbackDays=${defaultLookbackDays}`);
+
+    const sellers = await prisma.lingXingSeller.findMany({
+      where: { accountId, status: 1 },
+      select: { sid: true },
+      orderBy: { sid: 'asc' }
+    });
+    const sids = sellers.map(s => s.sid).filter(Boolean);
+
+    if (sids.length === 0) {
+      console.warn(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 无正常状态店铺，跳过`);
+      return {
+        results: [],
+        summary: { totalShops: 0, successCount: 0, failCount: 0, totalRecords: 0, message: '该账户下无正常状态店铺' }
+      };
+    }
+
+    console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 共 ${sids.length} 个店铺: [${sids.join(', ')}]`);
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+    let totalRecords = 0;
+
+    for (let i = 0; i < sids.length; i++) {
+      const sid = sids[i];
+      const dateRange = await syncState.getIncrementalDateRange(accountId, taskType, sid, {
+        defaultLookbackDays,
+        endDate,
+        timezone
+      });
+
+      if (dateRange.isEmpty) {
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 日期范围为空，跳过`);
+        results.push({ sid, success: true, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, skipped: true });
+        successCount++;
+        if (i < sids.length - 1 && delayBetweenShops > 0) await new Promise(r => setTimeout(r, delayBetweenShops));
+        continue;
+      }
+
+      try {
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 拉取 ${dateRange.start_date} ~ ${dateRange.end_date} ...`);
+        const fetchResult = await this.fetchAllFbaInventoryEventDetailReport(accountId, {
+          sid,
+          snapshot_date_after: dateRange.start_date,
+          snapshot_date_before: dateRange.end_date
+        }, { pageSize, delayBetweenPages });
+        const recordCount = fetchResult?.total ?? fetchResult?.data?.length ?? 0;
+        totalRecords += recordCount;
+
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: dateRange.end_date,
+          lastSyncAt: new Date(),
+          lastRecordCount: recordCount,
+          lastStatus: 'success',
+          lastErrorMessage: null
+        });
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        results.push({ sid, success: true, recordCount, start_date: dateRange.start_date, end_date: dateRange.end_date });
+        successCount++;
+      } catch (err) {
+        const message = err?.message || String(err);
+        await syncState.upsertSyncState(accountId, taskType, sid, {
+          lastEndDate: null,
+          lastSyncAt: new Date(),
+          lastRecordCount: null,
+          lastStatus: 'failed',
+          lastErrorMessage: message
+        }).catch(() => {});
+        console.error(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 失败 ${dateRange.start_date}~${dateRange.end_date} error=${message}`);
+        results.push({ sid, success: false, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, error: message });
+        failCount++;
+      }
+
+      if (i < sids.length - 1 && delayBetweenShops > 0) await new Promise(r => setTimeout(r, delayBetweenShops));
+    }
+
+    console.log(`${LOG_PREFIX} [${taskType}] 结束 accountId=${accountId} 店铺=${sids.length} 成功=${successCount} 失败=${failCount} 总条数=${totalRecords}`);
+    return { results, summary: { totalShops: sids.length, successCount, failCount, totalRecords } };
+  }
+
+  /**
+   * 盘存记录（Adjustment List）报表增量同步
+   * 接口使用 sids 参数，本方法按单店铺逐店同步并记录每店 lastEndDate
+   */
+  async incrementalSyncAdjustmentListReport(accountId, options = {}) {
+    return this._incrementalSyncReportBySid(
+      accountId,
+      'adjustmentList',
+      (id, params, opts) => this.fetchAllAdjustmentListReport(id, {
+        sid: params.sid,
+        start_date: params.start_date,
+        end_date: params.end_date,
+        sids: String(params.sid)
+      }, opts),
+      options
+    );
   }
 
   /**

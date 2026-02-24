@@ -248,7 +248,9 @@ model LingXingAccount {
   productPerformance LingXingProductPerformance[]
   // 关联的利润统计MSKU数据（一个账户下可以有多个利润统计记录）
   mskuProfitStatistics LingXingMskuProfitStatistics[]
-  
+  // 关联的增量同步状态（一个账户下可有多个任务类型的同步状态）
+  syncStates LingXingSyncState[]
+
   @@index([appId])
   @@index([isActive])
   @@map("ods_lingxing_accounts")
@@ -354,6 +356,29 @@ model SyncLog {
   @@index([source, storeId])
   @@index([createdAt])
   @@map("sync_logs")
+}
+
+// 领星增量同步状态表（存储上次同步的结束日期等，用于每日增量同步）
+model LingXingSyncState {
+  id               String    @id @default(uuid())
+  accountId        String    // 领星账户ID
+  taskType         String    // 任务类型：allOrders, fbaOrders, salesReport, productPerformance, mskuProfitStatistics 等
+  sid              Int?      // 店铺ID（可选，按店铺维度的任务使用；null 表示不按店铺）
+  lastEndDate      String?   // 上次同步的结束日期，格式 Y-m-d（下次增量从 lastEndDate 的次日开始）
+  lastSyncAt       DateTime? // 上次同步完成时间
+  lastRecordCount  Int?      // 上次同步记录数
+  lastStatus       String?   // 上次状态：success / failed
+  lastErrorMessage String?   @db.Text // 上次错误信息
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  account          LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, taskType, sid], name: "accountId_taskType_sid")
+  @@index([accountId])
+  @@index([taskType])
+  @@index([lastSyncAt])
+  @@map("ods_lingxing_sync_states")
 }
 
 // 亚马逊市场列表（基础数据）- 领星ERP基础数据

@@ -1,6 +1,7 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
 import lingxingBasicDataService from '../basic/lingxingBasicDataService.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP报表服务
@@ -1255,6 +1256,60 @@ class LingXingReportService extends LingXingApiClient {
       console.error('错误详情:', error);
       // 不抛出错误，因为保存失败不应该影响API调用
     }
+  }
+
+  /**
+   * 销量报表增量同步（按日期范围，无更新时间维度）
+   */
+  async incrementalSyncSalesReport(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'salesReport',
+      { defaultLookbackDays: options.defaultLookbackDays ?? 3, ...options },
+      async (id, params, opts) => this.getSalesReportByDateRange(id, { ...params, ...opts })
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 产品表现增量同步（按日期范围）
+   */
+  async incrementalSyncProductPerformance(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'productPerformance',
+      options,
+      async (id, params, opts) => this.fetchAllProductPerformance(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 利润统计 MSKU 增量同步（按日期，接口单次最多 7 天，内部按 7 天分片）
+   */
+  async incrementalSyncMskuProfitStatistics(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'mskuProfitStatistics',
+      options,
+      async (id, params) => {
+        const start = new Date(params.start_date + 'T00:00:00Z');
+        const end = new Date(params.end_date + 'T23:59:59Z');
+        let total = 0;
+        for (let d = new Date(start); d <= end;) {
+          const endChunk = new Date(d);
+          endChunk.setUTCDate(endChunk.getUTCDate() + 6);
+          if (endChunk > end) endChunk.setTime(end.getTime());
+          const startStr = d.toISOString().slice(0, 10);
+          const endStr = endChunk.toISOString().slice(0, 10);
+          const res = await this.getMskuProfitStatistics(id, { startDate: startStr, endDate: endStr });
+          total += res?.total ?? res?.records?.length ?? 0;
+          d.setUTCDate(d.getUTCDate() + 7);
+        }
+        return { total };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 }
 

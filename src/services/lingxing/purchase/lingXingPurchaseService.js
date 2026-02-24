@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP采购服务
@@ -2066,6 +2067,22 @@ class LingXingPurchaseService extends LingXingApiClient {
       console.error('自动拉取所有收货单列表失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 采购单增量同步（优先按更新时间 search_field_time: update_time）
+   */
+  async incrementalSyncPurchaseOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'update_time' } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllPurchaseOrders(id, params, opts);
+        return { total: res?.total ?? res?.orders?.length ?? 0, data: res?.orders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 }
 

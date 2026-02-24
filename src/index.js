@@ -29,6 +29,8 @@ import lingxingFinanceRoutes from './routes/lingxing/lingxingFinanceRoutes.js';
 console.log('[14] lingxingFinanceRoutes 导入完成');
 import lingxingReportRoutes from './routes/lingxing/lingxingReportRoutes.js';
 console.log('[14.5] lingxingReportRoutes 导入完成');
+import lingxingSyncRoutes from './routes/lingxing/lingxingSyncRoutes.js';
+console.log('[14.6] lingxingSyncRoutes 导入完成');
 import accountRoutes from './routes/accountRoutes.js';
 console.log('[15] accountRoutes 导入完成');
 
@@ -94,6 +96,8 @@ const start = async () => {
     console.log('[33] lingxingFinanceRoutes 注册完成');
     await fastify.register(lingxingReportRoutes, { prefix: '/api/lingxing/reports' });
     console.log('[33.5] lingxingReportRoutes 注册完成');
+    await fastify.register(lingxingSyncRoutes, { prefix: '/api/lingxing/sync' });
+    console.log('[33.6] lingxingSyncRoutes 注册完成');
     await fastify.register(accountRoutes, { prefix: '/api/accounts' });
     console.log('[34] accountRoutes 注册完成');
 
@@ -134,6 +138,7 @@ const start = async () => {
     console.log(`   - 领星工具管理: http://localhost:${PORT}/api/lingxing/tools`);
     console.log(`   - 领星财务管理: http://localhost:${PORT}/api/lingxing/finance`);
     console.log(`   - 领星报表管理: http://localhost:${PORT}/api/lingxing/reports`);
+    console.log(`   - 领星统一同步: http://localhost:${PORT}/api/lingxing/sync`);
     console.log(`   - 账户管理: http://localhost:${PORT}/api/accounts`);
   } catch (err) {
     console.error('启动服务器失败:', err);

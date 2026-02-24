@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP VC服务
@@ -1780,6 +1781,43 @@ class LingXingVcService extends LingXingApiClient {
       console.error('获取VC发货单详情失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * VC 订单增量同步（支持 search_field_time，不传则用接口默认；可按修改时间筛选时传入 search_field_time）
+   */
+  async incrementalSyncVcOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'vcOrder',
+      { ...options, extraParams: { purchase_order_type: ['0', '1'], search_field_time: options.search_field_time } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllVcOrders(id, params, opts);
+        return { total: res?.total ?? res?.orders?.length ?? 0, data: res?.orders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * VC 发货单增量同步（按创建时间 createTimeStartTime / createTimeEndTime）
+   */
+  async incrementalSyncVcInvoices(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'vcInvoice',
+      options,
+      async (id, params, opts) => {
+        const filterParams = {
+          createTimeStartTime: params.start_date,
+          createTimeEndTime: params.end_date,
+          shipmentType: options.shipmentType ?? 1
+        };
+        const res = await this.fetchAllVcInvoices(id, filterParams, opts);
+        return { total: res?.total ?? res?.invoices?.length ?? 0, data: res?.invoices };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 }
 

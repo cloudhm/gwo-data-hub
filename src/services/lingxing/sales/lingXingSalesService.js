@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP销售服务
@@ -667,6 +668,23 @@ class LingXingSalesService extends LingXingApiClient {
       console.error('自动同步所有亚马逊订单失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 销售-亚马逊订单增量同步（按日期范围）
+   * date_type: 1 订购时间，2 订单修改时间，3 平台更新时间，10 发货时间（默认 2 优先使用修改时间）
+   */
+  async incrementalSyncAmazonOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'salesAmazonOrder',
+      { ...options, extraParams: { date_type: options.date_type ?? 2 } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllAmazonOrders(id, params, opts);
+        return { total: res?.total ?? res?.orders?.length ?? 0, data: res?.orders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 }
 
