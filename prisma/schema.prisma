@@ -275,6 +275,22 @@ model SyncLog {
   @@map("sync_logs")
 }
 
+// 定时任务执行状态（方案二：按 task 维度，供接口查询）
+model JobTaskStatus {
+  id               String    @id @default(uuid())
+  jobName          String    @unique // 任务名，如 sync-job-allOrders
+  taskType         String    // 子任务类型，如 allOrders
+  lastRunAt        DateTime? // 最近一次执行时间
+  lastStatus       String?   // 最近一次状态：success / failed
+  lastError        String?   @db.Text // 异常原因（失败时）
+  nextScheduledAt  DateTime? // 下一次计划执行时间
+  updatedAt        DateTime  @updatedAt
+
+  @@index([taskType])
+  @@index([lastRunAt])
+  @@map("job_task_status")
+}
+
 // 领星增量同步状态表（存储上次同步的结束日期等，用于每日增量同步）
 model LingXingSyncState {
   id               String    @id @default(uuid())
