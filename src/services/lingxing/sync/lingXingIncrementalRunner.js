@@ -51,7 +51,7 @@ async function runAccountLevelIncrementalSync(accountId, taskType, options, fetc
       ...extraParams
     }, options);
 
-    const recordCount = result?.total ?? result?.data?.length ?? result?.orders?.length ?? result?.orderList?.length ?? result?.inboundOrderList?.length ?? result?.outboundOrderList?.length ?? result?.feeDetails?.length ?? 0;
+    const recordCount = result?.total ?? result?.data?.length ?? result?.orders?.length ?? result?.orderList?.length ?? result?.inboundOrderList?.length ?? result?.outboundOrderList?.length ?? result?.feeDetails?.length ?? result?.plans?.length ?? result?.returnOrders?.length ?? result?.changeOrders?.length ?? 0;
 
     await syncState.upsertSyncState(accountId, taskType, null, {
       lastEndDate: dateRange.end_date,

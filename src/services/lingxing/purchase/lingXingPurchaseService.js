@@ -2084,6 +2084,54 @@ class LingXingPurchaseService extends LingXingApiClient {
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
+
+  /**
+   * 采购计划增量同步（按 start_date/end_date，优先 search_field_time: update_time）
+   */
+  async incrementalSyncPurchasePlans(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchasePlan',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'update_time' } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllPurchasePlans(id, params, opts);
+        return { total: res?.total ?? res?.plans?.length ?? 0, data: res?.plans };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 采购退货单增量同步（按 start_date/end_date，可选 search_field_time: create_time/last_time）
+   */
+  async incrementalSyncPurchaseReturnOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseReturnOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'last_time' } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllPurchaseReturnOrders(id, params, opts);
+        return { total: res?.total ?? res?.returnOrders?.length ?? 0, data: res?.returnOrders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 采购变更单增量同步（按 start_date/end_date，可选 search_field_time: create_time/update_time）
+   */
+  async incrementalSyncPurchaseChangeOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseChangeOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'update_time' } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllPurchaseChangeOrders(id, params, opts);
+        return { total: res?.total ?? res?.changeOrders?.length ?? 0, data: res?.changeOrders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
 }
 
 export default new LingXingPurchaseService();
