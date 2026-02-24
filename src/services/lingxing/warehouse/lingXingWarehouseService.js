@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP仓库服务
@@ -243,6 +244,11 @@ class LingXingWarehouseService extends LingXingApiClient {
       }
 
       console.log(`所有仓库列表获取完成，共 ${allWarehouses.length} 个仓库`);
+
+      // 保存到数据库
+      if (allWarehouses && allWarehouses.length > 0) {
+        await this.saveWarehouses(accountId, allWarehouses);
+      }
 
       return {
         warehouses: allWarehouses,
@@ -566,6 +572,11 @@ class LingXingWarehouseService extends LingXingApiClient {
 
       console.log(`所有仓位列表获取完成，共 ${allBins.length} 个仓位`);
 
+      // 保存到数据库
+      if (allBins && allBins.length > 0) {
+        await this.saveWarehouseBins(accountId, allBins);
+      }
+
       return {
         bins: allBins,
         total: allBins.length,
@@ -639,6 +650,11 @@ class LingXingWarehouseService extends LingXingApiClient {
 
       const binList = response.data || [];
       const total = response.total || 0;
+
+      // 保存到数据库
+      if (binList && binList.length > 0) {
+        await this.saveProductEntryRecommendBins(accountId, binList);
+      }
 
       return {
         data: binList,
@@ -904,12 +920,15 @@ class LingXingWarehouseService extends LingXingApiClient {
       };
 
       for (const fbaInventory of fbaInventoryList) {
-        // 使用 seller_sku 和 asin 作为唯一标识，如果都没有则跳过
-        const sellerSku = getStringValue(fbaInventory.seller_sku, fbaInventory.sellerSku);
+        // 使用 name + sid + asin 作为唯一标识
+        // name 字段可能来自 name、product_name 或 productName，允许为空字符串
+        const name = getStringValue(fbaInventory.name, fbaInventory.product_name, fbaInventory.productName) || '';
+        const sid = fbaInventory.sid !== undefined && fbaInventory.sid !== null ? String(fbaInventory.sid) : null;
         const asin = getStringValue(fbaInventory.asin);
         
-        if (!sellerSku && !asin) {
-          console.warn('FBA库存记录缺少 seller_sku 和 asin，跳过保存:', fbaInventory);
+        // 跳过缺少必要字段的记录（sid 和 asin 是唯一键的一部分，name 可以为空字符串）
+        if (!sid || !asin) {
+          console.warn('FBA库存记录缺少 sid 或 asin，跳过保存:', fbaInventory);
           continue;
         }
 
@@ -924,22 +943,23 @@ class LingXingWarehouseService extends LingXingApiClient {
         // 处理价格字段
         const cgPrice = parsePrice(fbaInventory.cg_price);
 
-        // 确保唯一键字段不为空（使用默认值）
-        const sellerSkuForKey = sellerSku || '';
-        const asinForKey = asin || '';
+        // 获取 sellerSku（虽然不是唯一键的一部分，但仍然保存）
+        const sellerSku = getStringValue(fbaInventory.seller_sku, fbaInventory.sellerSku);
 
         await prisma.lingXingFbaWarehouseDetail.upsert({
           where: {
-            accountId_sellerSku_asin: {
+            accountId_name_sid_asin: {
               accountId: accountId,
-              sellerSku: sellerSkuForKey,
-              asin: asinForKey
+              name: name,
+              sid: sid,
+              asin: asin
             }
           },
           update: {
             fnsku: getStringValue(fbaInventory.fnsku, fbaInventory.fnSku),
             parentAsin: getStringValue(fbaInventory.parent_asin, fbaInventory.parentAsin),
             productName: getStringValue(fbaInventory.product_name, fbaInventory.productName),
+            name: name,
             sku: getStringValue(fbaInventory.sku),
             spu: getStringValue(fbaInventory.spu),
             spuName: getStringValue(fbaInventory.spu_name, fbaInventory.spuName),
@@ -961,11 +981,12 @@ class LingXingWarehouseService extends LingXingApiClient {
           },
           create: {
             accountId: accountId,
-            sellerSku: sellerSkuForKey,
-            asin: asinForKey,
+            sellerSku: getStringValue(fbaInventory.seller_sku, fbaInventory.sellerSku),
+            asin: asin,
             fnsku: getStringValue(fbaInventory.fnsku, fbaInventory.fnSku),
             parentAsin: getStringValue(fbaInventory.parent_asin, fbaInventory.parentAsin),
             productName: getStringValue(fbaInventory.product_name, fbaInventory.productName),
+            name: name,
             sku: getStringValue(fbaInventory.sku),
             spu: getStringValue(fbaInventory.spu),
             spuName: getStringValue(fbaInventory.spu_name, fbaInventory.spuName),
@@ -1137,6 +1158,11 @@ class LingXingWarehouseService extends LingXingApiClient {
       const inventoryDetailsList = response.data || [];
       const total = response.total || 0;
 
+      // 保存库存明细列表到数据库
+      if (inventoryDetailsList.length > 0) {
+        await this.saveInventoryDetails(accountId, inventoryDetailsList);
+      }
+
       return {
         data: inventoryDetailsList,
         total: total
@@ -1221,6 +1247,11 @@ class LingXingWarehouseService extends LingXingApiClient {
 
       console.log(`所有库存明细列表获取完成，共 ${allInventoryDetailsList.length} 条记录`);
 
+      // 保存到数据库（在get方法中已经保存，这里可以再次保存以确保数据最新）
+      // if (allInventoryDetailsList && allInventoryDetailsList.length > 0) {
+      //   await this.saveInventoryDetails(accountId, allInventoryDetailsList);
+      // }
+
       return {
         inventoryDetailsList: allInventoryDetailsList,
         total: allInventoryDetailsList.length,
@@ -1285,6 +1316,11 @@ class LingXingWarehouseService extends LingXingApiClient {
 
       const inventoryBinDetailsList = response.data || [];
       const total = response.total || 0;
+
+      // 保存仓位库存明细列表到数据库
+      if (inventoryBinDetailsList.length > 0) {
+        await this.saveInventoryBinDetails(accountId, inventoryBinDetailsList);
+      }
 
       return {
         data: inventoryBinDetailsList,
@@ -1370,6 +1406,11 @@ class LingXingWarehouseService extends LingXingApiClient {
 
       console.log(`所有仓位库存明细列表获取完成，共 ${allInventoryBinDetailsList.length} 条记录`);
 
+      // 保存到数据库（在get方法中已经保存，这里可以再次保存以确保数据最新）
+      // if (allInventoryBinDetailsList && allInventoryBinDetailsList.length > 0) {
+      //   await this.saveInventoryBinDetails(accountId, allInventoryBinDetailsList);
+      // }
+
       return {
         inventoryBinDetailsList: allInventoryBinDetailsList,
         total: allInventoryBinDetailsList.length,
@@ -1448,6 +1489,11 @@ class LingXingWarehouseService extends LingXingApiClient {
 
       const statementList = response.data || [];
       const total = response.total || 0;
+
+      // 保存到数据库
+      if (statementList && statementList.length > 0) {
+        await this.saveWarehouseInventoryStatements(accountId, statementList);
+      }
 
       return {
         data: statementList,
@@ -1548,6 +1594,503 @@ class LingXingWarehouseService extends LingXingApiClient {
   }
 
   /**
+   * 保存库存流水列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} statements - 库存流水列表数据
+   */
+  async saveWarehouseInventoryStatements(accountId, statements) {
+    try {
+      if (!prisma.lingXingWarehouseInventoryStatement) {
+        console.error('Prisma Client 中未找到 lingXingWarehouseInventoryStatement 模型');
+        return;
+      }
+
+      for (const statement of statements) {
+        // 使用 wid + order_sn + product_id 作为唯一键
+        const wid = statement.wid || statement.warehouse_id;
+        const orderSn = statement.order_sn || statement.orderSn || statement.order_number || statement.orderNumber;
+        const productId = statement.product_id || statement.productId;
+        
+        // 跳过缺少必要字段的记录（这些字段是唯一键的一部分）
+        if (!wid || !orderSn) {
+          console.warn('跳过缺少 wid 或 order_sn 的库存流水记录:', statement);
+          continue;
+        }
+
+        const widStr = String(wid);
+        const orderSnStr = String(orderSn);
+        
+        // 处理 productId（可能为 null，但仍然是唯一键的一部分）
+        const productIdValue = productId !== undefined && productId !== null
+          ? (typeof productId === 'string' ? BigInt(productId) : BigInt(productId))
+          : null;
+
+        // 辅助函数：处理字符串字段
+        const getStringValue = (value, altValue = null) => {
+          if (value !== undefined && value !== null && value !== '') {
+            return String(value);
+          }
+          if (altValue !== undefined && altValue !== null && altValue !== '') {
+            return String(altValue);
+          }
+          return null;
+        };
+
+        // 辅助函数：处理整数字段
+        const parseIntValue = (value) => {
+          if (value === undefined || value === null || value === '') {
+            return null;
+          }
+          const parsed = parseInt(value);
+          return isNaN(parsed) ? null : parsed;
+        };
+
+        // 辅助函数：处理小数字段
+        const parseDecimalValue = (value) => {
+          if (value === undefined || value === null || value === '') {
+            return null;
+          }
+          const parsed = parseFloat(value);
+          return isNaN(parsed) ? null : parsed;
+        };
+
+        // 提取所有字段
+        const wareHouseName = getStringValue(statement.ware_house_name, statement.warehouseName);
+        const productName = getStringValue(statement.product_name, statement.productName);
+        const sku = getStringValue(statement.sku);
+        const sellerId = statement.seller_id !== undefined && statement.seller_id !== null ? String(statement.seller_id) : null;
+        const fnsku = getStringValue(statement.fnsku);
+        const productGoodNum = parseIntValue(statement.product_good_num);
+        const productBadNum = parseIntValue(statement.product_bad_num);
+        const productQcNum = parseIntValue(statement.product_qc_num);
+        const productLockGoodNum = parseIntValue(statement.product_lock_good_num);
+        const productLockBadNum = parseIntValue(statement.product_lock_bad_num);
+        const goodTransitNum = parseIntValue(statement.good_transit_num);
+        const badTransitNum = parseIntValue(statement.bad_transit_num);
+        const type = parseIntValue(statement.type);
+        const typeText = getStringValue(statement.type_text);
+        const subType = getStringValue(statement.sub_type);
+        const subTypeText = getStringValue(statement.sub_type_text);
+        const feeCost = parseDecimalValue(statement.fee_cost);
+        const singleCgPrice = parseDecimalValue(statement.single_cg_price);
+        const singleFeeCost = parseDecimalValue(statement.single_fee_cost);
+        const singleStockPrice = parseDecimalValue(statement.single_stock_price);
+        const stockCost = parseDecimalValue(statement.stock_cost);
+        const productAmounts = parseDecimalValue(statement.product_amounts);
+        const headStockPrice = parseDecimalValue(statement.head_stock_price);
+        const headStockCost = parseDecimalValue(statement.head_stock_cost);
+        const optUid = statement.opt_uid !== undefined && statement.opt_uid !== null ? String(statement.opt_uid) : null;
+        const optTime = getStringValue(statement.opt_time);
+        const optRealName = getStringValue(statement.opt_real_name);
+        const remark = getStringValue(statement.remark);
+        const bid = statement.bid !== undefined && statement.bid !== null ? String(statement.bid) : null;
+        const brandName = getStringValue(statement.brand_name);
+        const refOrderSn = getStringValue(statement.ref_order_sn);
+        const productTotal = parseIntValue(statement.product_total);
+        const goodBalanceNum = parseIntValue(statement.good_balance_num);
+        const badBalanceNum = parseIntValue(statement.bad_balance_num);
+        const goodLockBalanceNum = parseIntValue(statement.good_lock_balance_num);
+        const badLockBalanceNum = parseIntValue(statement.bad_lock_balance_num);
+        const qcBalanceNum = parseIntValue(statement.qc_balance_num);
+        const goodTransitBalanceNum = parseIntValue(statement.good_transit_balance_num);
+        const statementId = getStringValue(statement.statement_id);
+        const badTransitBalanceNum = parseIntValue(statement.bad_transit_balance_num);
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, wid, orderSn, productId
+        await prisma.lingXingWarehouseInventoryStatement.upsert({
+          where: {
+            accountId_wid_orderSn_productId: {
+              accountId: accountId,
+              wid: widStr,
+              orderSn: orderSnStr,
+              productId: productIdValue
+            }
+          },
+          update: {
+            wid: widStr,
+            wareHouseName: wareHouseName,
+            orderSn: orderSnStr,
+            productId: productIdValue,
+            productName: productName,
+            sku: sku,
+            sellerId: sellerId,
+            fnsku: fnsku,
+            productGoodNum: productGoodNum,
+            productBadNum: productBadNum,
+            productQcNum: productQcNum,
+            productLockGoodNum: productLockGoodNum,
+            productLockBadNum: productLockBadNum,
+            goodTransitNum: goodTransitNum,
+            badTransitNum: badTransitNum,
+            type: type,
+            typeText: typeText,
+            subType: subType,
+            subTypeText: subTypeText,
+            feeCost: feeCost,
+            singleCgPrice: singleCgPrice,
+            singleFeeCost: singleFeeCost,
+            singleStockPrice: singleStockPrice,
+            stockCost: stockCost,
+            productAmounts: productAmounts,
+            headStockPrice: headStockPrice,
+            headStockCost: headStockCost,
+            optUid: optUid,
+            optTime: optTime,
+            optRealName: optRealName,
+            remark: remark,
+            bid: bid,
+            brandName: brandName,
+            refOrderSn: refOrderSn,
+            productTotal: productTotal,
+            goodBalanceNum: goodBalanceNum,
+            badBalanceNum: badBalanceNum,
+            goodLockBalanceNum: goodLockBalanceNum,
+            badLockBalanceNum: badLockBalanceNum,
+            qcBalanceNum: qcBalanceNum,
+            goodTransitBalanceNum: goodTransitBalanceNum,
+            statementId: statementId,
+            badTransitBalanceNum: badTransitBalanceNum,
+            data: statement,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            wid: widStr,
+            wareHouseName: wareHouseName,
+            orderSn: orderSnStr,
+            productId: productIdValue,
+            productName: productName,
+            sku: sku,
+            sellerId: sellerId,
+            fnsku: fnsku,
+            productGoodNum: productGoodNum,
+            productBadNum: productBadNum,
+            productQcNum: productQcNum,
+            productLockGoodNum: productLockGoodNum,
+            productLockBadNum: productLockBadNum,
+            goodTransitNum: goodTransitNum,
+            badTransitNum: badTransitNum,
+            type: type,
+            typeText: typeText,
+            subType: subType,
+            subTypeText: subTypeText,
+            feeCost: feeCost,
+            singleCgPrice: singleCgPrice,
+            singleFeeCost: singleFeeCost,
+            singleStockPrice: singleStockPrice,
+            stockCost: stockCost,
+            productAmounts: productAmounts,
+            headStockPrice: headStockPrice,
+            headStockCost: headStockCost,
+            optUid: optUid,
+            optTime: optTime,
+            optRealName: optRealName,
+            remark: remark,
+            bid: bid,
+            brandName: brandName,
+            refOrderSn: refOrderSn,
+            productTotal: productTotal,
+            goodBalanceNum: goodBalanceNum,
+            badBalanceNum: badBalanceNum,
+            goodLockBalanceNum: goodLockBalanceNum,
+            badLockBalanceNum: badLockBalanceNum,
+            qcBalanceNum: qcBalanceNum,
+            goodTransitBalanceNum: goodTransitBalanceNum,
+            statementId: statementId,
+            badTransitBalanceNum: badTransitBalanceNum,
+            data: statement
+          }
+        });
+      }
+
+      console.log(`库存流水列表已保存到数据库: 共 ${statements.length} 条记录`);
+    } catch (error) {
+      console.error('保存库存流水列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 保存仓位流水列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} binStatements - 仓位流水列表数据
+   */
+  async saveWarehouseBinStatements(accountId, binStatements) {
+    try {
+      if (!prisma.lingXingWarehouseBinStatement) {
+        console.error('Prisma Client 中未找到 lingXingWarehouseBinStatement 模型');
+        return;
+      }
+
+      for (const statement of binStatements) {
+        // 使用 wid + whb_id + order_sn + product_id 作为唯一键
+        // API返回的字段是 whb_id（仓位id），不是 binId
+        const wid = statement.wid || statement.warehouse_id;
+        const binId = statement.whb_id || statement.whbId || statement.bin_id || statement.binId;
+        const orderSn = statement.order_sn || statement.orderSn || statement.order_number || statement.orderNumber;
+        const productId = statement.product_id || statement.productId;
+        
+        // 跳过缺少必要字段的记录（这些字段是唯一键的一部分）
+        if (!wid || !binId || !orderSn) {
+          console.warn('跳过缺少 wid、whb_id 或 order_sn 的仓位流水记录:', statement);
+          continue;
+        }
+
+        const widStr = String(wid);
+        const binIdStr = String(binId);
+        const orderSnStr = String(orderSn);
+        
+        // 处理 productId（可能为 null，但仍然是唯一键的一部分）
+        const productIdValue = productId !== undefined && productId !== null
+          ? (typeof productId === 'string' ? BigInt(productId) : BigInt(productId))
+          : null;
+
+        // 提取所有字段
+        const num = statement.num !== undefined ? statement.num : null;
+        const sku = statement.sku || null;
+        const type = statement.type !== undefined ? statement.type : null;
+        const fnsku = statement.fnsku || null;
+        const remark = statement.remark || null;
+        const optUid = statement.opt_uid !== undefined && statement.opt_uid !== null
+          ? (typeof statement.opt_uid === 'string' ? BigInt(statement.opt_uid) : BigInt(statement.opt_uid))
+          : null;
+        const optTime = statement.opt_time || null;
+        const whbName = statement.whb_name || null;
+        const sellerId = statement.seller_id !== undefined ? String(statement.seller_id) : null;
+        const typeText = statement.type_text || null;
+        const optRealname = statement.opt_realname || null;
+        const productName = statement.product_name || null;
+        const whbTypeName = statement.whb_type_name || null;
+        const wareHouseName = statement.ware_house_name || null;
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, wid, binId, orderSn, productId
+        await prisma.lingXingWarehouseBinStatement.upsert({
+          where: {
+            accountId_wid_binId_orderSn_productId: {
+              accountId: accountId,
+              wid: widStr,
+              binId: binIdStr,
+              orderSn: orderSnStr,
+              productId: productIdValue
+            }
+          },
+          update: {
+            wid: widStr,
+            binId: binIdStr,
+            orderSn: orderSnStr,
+            productId: productIdValue,
+            num: num,
+            sku: sku,
+            type: type,
+            fnsku: fnsku,
+            remark: remark,
+            optUid: optUid,
+            optTime: optTime,
+            whbName: whbName,
+            sellerId: sellerId,
+            typeText: typeText,
+            optRealname: optRealname,
+            productName: productName,
+            whbTypeName: whbTypeName,
+            wareHouseName: wareHouseName,
+            data: statement,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            wid: widStr,
+            binId: binIdStr,
+            orderSn: orderSnStr,
+            productId: productIdValue,
+            num: num,
+            sku: sku,
+            type: type,
+            fnsku: fnsku,
+            remark: remark,
+            optUid: optUid,
+            optTime: optTime,
+            whbName: whbName,
+            sellerId: sellerId,
+            typeText: typeText,
+            optRealname: optRealname,
+            productName: productName,
+            whbTypeName: whbTypeName,
+            wareHouseName: wareHouseName,
+            data: statement
+          }
+        });
+      }
+
+      console.log(`仓位流水列表已保存到数据库: 共 ${binStatements.length} 条记录`);
+    } catch (error) {
+      console.error('保存仓位流水列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 保存产品仓位推荐列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} binList - 产品仓位推荐列表数据
+   */
+  async saveProductEntryRecommendBins(accountId, binList) {
+    try {
+      if (!prisma.lingXingProductEntryRecommendBin) {
+        console.error('Prisma Client 中未找到 lingXingProductEntryRecommendBin 模型');
+        return;
+      }
+
+      for (const bin of binList) {
+        // 使用 wid + productId + whbId 作为唯一键
+        const wid = bin.wid || bin.warehouse_id;
+        const productId = bin.productId || bin.product_id;
+        const whbId = bin.whbId || bin.whb_id || bin.id || bin.binId || bin.bin_id;
+        
+        // 跳过缺少必要字段的记录（这些字段是唯一键的一部分）
+        if (!wid || !productId || !whbId) {
+          console.warn('跳过缺少 wid、productId 或 whbId 的产品仓位推荐记录:', bin);
+          continue;
+        }
+
+        const widStr = String(wid);
+        const productIdValue = typeof productId === 'string' 
+          ? BigInt(productId) 
+          : BigInt(productId);
+        const whbIdValue = typeof whbId === 'string' 
+          ? BigInt(whbId) 
+          : BigInt(whbId);
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, wid, productId, whbId
+        await prisma.lingXingProductEntryRecommendBin.upsert({
+          where: {
+            accountId_wid_productId_whbId: {
+              accountId: accountId,
+              wid: widStr,
+              productId: productIdValue,
+              whbId: whbIdValue
+            }
+          },
+          update: {
+            wid: widStr,
+            productId: productIdValue,
+            whbId: whbIdValue,
+            data: bin,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            wid: widStr,
+            productId: productIdValue,
+            whbId: whbIdValue,
+            data: bin
+          }
+        });
+      }
+
+      console.log(`产品仓位推荐列表已保存到数据库: 共 ${binList.length} 条记录`);
+    } catch (error) {
+      console.error('保存产品仓位推荐列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 保存入库单列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} inboundOrders - 入库单列表数据
+   */
+  async saveInboundOrders(accountId, inboundOrders) {
+    try {
+      if (!prisma.lingXingInboundOrder) {
+        console.error('Prisma Client 中未找到 lingXingInboundOrder 模型');
+        return;
+      }
+
+      for (const order of inboundOrders) {
+        if (!order.order_sn) {
+          continue;
+        }
+
+        const wid = order.wid !== undefined ? order.wid : (order.warehouse_id !== undefined ? order.warehouse_id : null);
+        const widStr = wid !== undefined && wid !== null ? String(wid) : null;
+
+        await prisma.lingXingInboundOrder.upsert({
+          where: {
+            accountId_inboundOrderSn: {
+              accountId: accountId,
+              orderSn: order.order_sn
+            }
+          },
+          update: {
+            wid: widStr,
+            data: order,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            orderSn: order.order_sn,
+            wid: widStr,
+            data: order
+          }
+        });
+      }
+
+      console.log(`入库单列表已保存到数据库: 共 ${inboundOrders.length} 条记录`);
+    } catch (error) {
+      console.error('保存入库单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 保存出库单列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} outboundOrders - 出库单列表数据
+   */
+  async saveOutboundOrders(accountId, outboundOrders) {
+    try {
+      if (!prisma.lingXingOutboundOrder) {
+        console.error('Prisma Client 中未找到 lingXingOutboundOrder 模型');
+        return;
+      }
+
+      for (const order of outboundOrders) {
+        if (!order.order_sn) {
+          continue;
+        }
+
+        const wid = order.wid !== undefined ? order.wid : (order.warehouse_id !== undefined ? order.warehouse_id : null);
+        const widStr = wid !== undefined && wid !== null ? String(wid) : null;
+
+        await prisma.lingXingOutboundOrder.upsert({
+          where: {
+            accountId_outboundOrderSn: {
+              accountId: accountId,
+              orderSn: order.order_sn
+            }
+          },
+          update: {
+            wid: widStr,
+            data: order,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            orderSn: order.order_sn,
+            wid: widStr,
+            data: order
+          }
+        });
+      }
+
+      console.log(`出库单列表已保存到数据库: 共 ${outboundOrders.length} 条记录`);
+    } catch (error) {
+      console.error('保存出库单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
    * 查询仓位流水
    * API: POST /erp/sc/routing/data/local_inventory/wareHouseBinStatement
    * @param {string} accountId - 领星账户ID
@@ -1608,6 +2151,11 @@ class LingXingWarehouseService extends LingXingApiClient {
 
       const binStatementList = response.data || [];
       const total = response.total || 0;
+
+      // 保存到数据库
+      if (binStatementList && binStatementList.length > 0) {
+        await this.saveWarehouseBinStatements(accountId, binStatementList);
+      }
 
       return {
         data: binStatementList,
@@ -1705,6 +2253,1934 @@ class LingXingWarehouseService extends LingXingApiClient {
       console.error('自动拉取所有仓位流水列表失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 查询收货单列表
+   * API: POST /erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList
+   * 支持查询收货单列表，对应系统【仓库】>【收货单】数据
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数（所有参数都是可选的）
+   *   - date_type: 查询时间类型（可选）：1 预计到货时间，2 收货时间，3 创建时间，4 更新时间
+   *   - start_date: 开始时间，格式：Y-m-d，当筛选更新时间时，支持Y-m-d或Y-m-d H:i:s（可选）
+   *   - end_date: 结束时间，格式：Y-m-d，当筛选更新时间时，支持Y-m-d或Y-m-d H:i:s（可选）
+   *   - order_sns: 收货单号，多个使用英文逗号分隔（可选）
+   *   - status: 状态（可选）：10 待收货，40 已完成
+   *   - wid: 仓库id，多个使用英文逗号分隔（可选）
+   *   - order_type: 收货类型（可选）：1 采购订单，2 委外订单
+   *   - qc_status: 质检状态，多个使用英文逗号分隔（可选）：0 未质检，1 部分质检，2 完成质检
+   *   - offset: 分页偏移量（可选，默认0）
+   *   - length: 分页长度（可选，默认200，上限500）
+   * @returns {Promise<Object>} 收货单列表数据 { data: [], total: 0 }
+   */
+  async getPurchaseReceiptOrderList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 构建请求参数（所有参数都是可选的）
+      const requestParams = {};
+      if (params.date_type !== undefined) {
+        requestParams.date_type = params.date_type;
+      }
+      if (params.start_date !== undefined) {
+        requestParams.start_date = params.start_date;
+      }
+      if (params.end_date !== undefined) {
+        requestParams.end_date = params.end_date;
+      }
+      if (params.order_sns !== undefined) {
+        requestParams.order_sns = params.order_sns;
+      }
+      if (params.status !== undefined) {
+        requestParams.status = params.status;
+      }
+      if (params.wid !== undefined) {
+        requestParams.wid = params.wid;
+      }
+      if (params.order_type !== undefined) {
+        requestParams.order_type = params.order_type;
+      }
+      if (params.qc_status !== undefined) {
+        requestParams.qc_status = params.qc_status;
+      }
+      if (params.offset !== undefined) {
+        requestParams.offset = params.offset;
+      }
+      if (params.length !== undefined) {
+        // 确保 length 不超过 500
+        requestParams.length = Math.min(params.length, 500);
+      }
+
+      // 调用API获取收货单列表（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取收货单列表失败');
+      }
+
+      const orderList = response.data?.list || [];
+      const total = response.data?.total || 0;
+
+      // 保存到数据库
+      if (orderList && orderList.length > 0) {
+        await this.savePurchaseReceiptOrders(accountId, orderList);
+      }
+
+      return {
+        data: orderList,
+        total: total
+      };
+    } catch (error) {
+      console.error('获取收货单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 保存收货单列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} orders - 收货单列表数据
+   */
+  async savePurchaseReceiptOrders(accountId, orders) {
+    try {
+      if (!prisma.lingXingPurchaseReceiptOrder) {
+        console.error('Prisma Client 中未找到 lingXingPurchaseReceiptOrder 模型');
+        return;
+      }
+
+      for (const order of orders) {
+        // 使用 order_sn 作为唯一键
+        const orderSn = order.order_sn || order.orderSn || order.order_number || order.orderNumber;
+        
+        // 跳过缺少必要字段的记录
+        if (!orderSn) {
+          console.warn('跳过缺少 order_sn 的收货单记录:', order);
+          continue;
+        }
+
+        // 提取所有字段
+        const wid = order.wid || order.warehouse_id;
+        const widStr = wid ? String(wid) : null;
+        const remark = order.remark || null;
+        const status = order.status !== undefined ? order.status : null;
+        const optUid = order.opt_uid !== undefined && order.opt_uid !== null
+          ? (typeof order.opt_uid === 'string' ? BigInt(order.opt_uid) : BigInt(order.opt_uid))
+          : null;
+        const qcType = order.qc_type !== undefined ? order.qc_type : null;
+        const otherFee = order.other_fee !== undefined && order.other_fee !== null && order.other_fee !== ''
+          ? parseFloat(order.other_fee) : null;
+        const createUid = order.create_uid !== undefined && order.create_uid !== null
+          ? (typeof order.create_uid === 'string' ? BigInt(order.create_uid) : BigInt(order.create_uid))
+          : null;
+        const orderType = order.order_type || null;
+        const createTime = order.create_time || null;
+        const receiveUid = order.receive_uid !== undefined && order.receive_uid !== null
+          ? (typeof order.receive_uid === 'string' ? BigInt(order.receive_uid) : BigInt(order.receive_uid))
+          : null;
+        const supplierId = order.supplier_id !== undefined && order.supplier_id !== null
+          ? (typeof order.supplier_id === 'string' ? BigInt(order.supplier_id) : BigInt(order.supplier_id))
+          : null;
+        const updateTime = order.update_time || null;
+        const optRealname = order.opt_realname || null;
+        const receiveTime = order.receive_time || null;
+        const shippingCost = order.shipping_cost !== undefined && order.shipping_cost !== null && order.shipping_cost !== ''
+          ? parseFloat(order.shipping_cost) : null;
+        const otherCurrency = order.other_currency || null;
+        const createRealname = order.create_realname || null;
+        const receiveRealname = order.receive_realname || null;
+        const businessOrderSn = order.business_order_sn || null;
+        const inboundOrderSns = order.inbound_order_sns || null;
+        const logisticsCompany = order.logistics_company || null;
+        const shippingCurrency = order.shipping_currency || null;
+        const logisticsOrderNo = order.logistics_order_no || null;
+        const expectArrivalTime = order.expect_arrival_time || null;
+        const itemList = order.item_list || null;
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, orderSn
+        await prisma.lingXingPurchaseReceiptOrder.upsert({
+          where: {
+            accountId_purchaseReceiptOrderSn: {
+              accountId: accountId,
+              orderSn: orderSn
+            }
+          },
+          update: {
+            wid: widStr,
+            remark: remark,
+            status: status,
+            optUid: optUid,
+            qcType: qcType,
+            otherFee: otherFee,
+            createUid: createUid,
+            orderType: orderType,
+            createTime: createTime,
+            receiveUid: receiveUid,
+            supplierId: supplierId,
+            updateTime: updateTime,
+            optRealname: optRealname,
+            receiveTime: receiveTime,
+            shippingCost: shippingCost,
+            otherCurrency: otherCurrency,
+            createRealname: createRealname,
+            receiveRealname: receiveRealname,
+            businessOrderSn: businessOrderSn,
+            inboundOrderSns: inboundOrderSns,
+            logisticsCompany: logisticsCompany,
+            shippingCurrency: shippingCurrency,
+            logisticsOrderNo: logisticsOrderNo,
+            expectArrivalTime: expectArrivalTime,
+            itemList: itemList,
+            data: order,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            orderSn: orderSn,
+            wid: widStr,
+            remark: remark,
+            status: status,
+            optUid: optUid,
+            qcType: qcType,
+            otherFee: otherFee,
+            createUid: createUid,
+            orderType: orderType,
+            createTime: createTime,
+            receiveUid: receiveUid,
+            supplierId: supplierId,
+            updateTime: updateTime,
+            optRealname: optRealname,
+            receiveTime: receiveTime,
+            shippingCost: shippingCost,
+            otherCurrency: otherCurrency,
+            createRealname: createRealname,
+            receiveRealname: receiveRealname,
+            businessOrderSn: businessOrderSn,
+            inboundOrderSns: inboundOrderSns,
+            logisticsCompany: logisticsCompany,
+            shippingCurrency: shippingCurrency,
+            logisticsOrderNo: logisticsOrderNo,
+            expectArrivalTime: expectArrivalTime,
+            itemList: itemList,
+            data: order
+          }
+        });
+      }
+
+      console.log(`收货单列表已保存到数据库: 共 ${orders.length} 条记录`);
+    } catch (error) {
+      console.error('保存收货单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 自动拉取所有收货单列表（自动处理分页）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} filterParams - 筛选参数（可选）
+   *   - date_type: 查询时间类型（可选）
+   *   - start_date: 开始时间（可选）
+   *   - end_date: 结束时间（可选）
+   *   - order_sns: 收货单号（可选）
+   *   - status: 状态（可选）
+   *   - wid: 仓库id（可选）
+   *   - order_type: 收货类型（可选）
+   *   - qc_status: 质检状态（可选）
+   * @param {Object} options - 选项
+   *   - pageSize: 每页大小（默认200，最大500）
+   *   - delayBetweenPages: 分页之间的延迟时间（毫秒，默认500）
+   *   - onProgress: 进度回调函数 (currentPage, totalPages, currentCount, totalCount) => void
+   * @returns {Promise<Object>} { orderList: [], total: 0, stats: {} }
+   */
+  async fetchAllPurchaseReceiptOrders(accountId, filterParams = {}, options = {}) {
+    const {
+      pageSize = 200,
+      delayBetweenPages = 500,
+      onProgress = null
+    } = options;
+
+    // 确保 pageSize 不超过 500
+    const actualPageSize = Math.min(pageSize, 500);
+
+    try {
+      console.log('开始自动拉取所有收货单列表...');
+
+      const allOrderList = [];
+      let currentOffset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`正在获取收货单列表（offset: ${currentOffset}, length: ${actualPageSize}）...`);
+
+        try {
+          const pageResult = await this.getPurchaseReceiptOrderList(accountId, {
+            ...filterParams,
+            offset: currentOffset,
+            length: actualPageSize
+          });
+
+          const pageOrderList = pageResult.data || [];
+          const pageTotal = pageResult.total || 0;
+
+          if (currentOffset === 0) {
+            totalCount = pageTotal;
+            console.log(`总共需要获取 ${totalCount} 条收货单记录，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
+          }
+
+          allOrderList.push(...pageOrderList);
+          console.log(`获取完成，本页 ${pageOrderList.length} 条记录，累计 ${allOrderList.length} 条记录`);
+
+          if (onProgress) {
+            onProgress(Math.floor(currentOffset / actualPageSize) + 1, Math.ceil(totalCount / actualPageSize), allOrderList.length, totalCount);
+          }
+
+          if (pageOrderList.length < actualPageSize || allOrderList.length >= totalCount) {
+            hasMore = false;
+          } else {
+            currentOffset += actualPageSize;
+            if (delayBetweenPages > 0) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+            }
+          }
+        } catch (error) {
+          console.error(`获取收货单列表失败:`, error.message);
+          if (allOrderList.length === 0) {
+            throw error;
+          }
+          hasMore = false;
+        }
+      }
+
+      console.log(`所有收货单列表获取完成，共 ${allOrderList.length} 条记录`);
+
+      return {
+        orderList: allOrderList,
+        total: allOrderList.length,
+        stats: {
+          totalOrders: allOrderList.length,
+          pagesFetched: Math.floor(currentOffset / actualPageSize) + 1
+        }
+      };
+    } catch (error) {
+      console.error('自动拉取所有收货单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询质检单列表
+   * API: POST /erp/sc/routing/deliveryReceipt/ReceiptOrderQc/getOrderList
+   * 支持查询质检单列表，对应系统【仓库】>【质检单】数据
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数（所有参数都是可选的）
+   *   - date_type: 查询时间类型（可选）：1 质检时间，2 收货时间，3 创建时间
+   *   - start_date: 开始时间，格式：Y-m-d（可选）
+   *   - end_date: 结束时间，格式：Y-m-d（可选）
+   *   - qc_sns: 质检单号，多个使用英文逗号分隔（可选）
+   *   - status: 状态，多个使用英文逗号分隔（可选）：0 待质检，1 已质检，2 已免检，10 已质检（撤销），20 已免检（撤销）
+   *   - wid: 仓库id，多个用英文逗号分隔（可选）
+   *   - offset: 分页偏移量（可选，默认0）
+   *   - length: 分页长度（可选，默认200，上限500）
+   * @returns {Promise<Object>} 质检单列表数据 { data: [], total: 0 }
+   */
+  async getReceiptOrderQcList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 构建请求参数（所有参数都是可选的）
+      const requestParams = {};
+      if (params.date_type !== undefined) {
+        requestParams.date_type = params.date_type;
+      }
+      if (params.start_date !== undefined) {
+        requestParams.start_date = params.start_date;
+      }
+      if (params.end_date !== undefined) {
+        requestParams.end_date = params.end_date;
+      }
+      if (params.qc_sns !== undefined) {
+        requestParams.qc_sns = params.qc_sns;
+      }
+      if (params.status !== undefined) {
+        requestParams.status = params.status;
+      }
+      if (params.wid !== undefined) {
+        requestParams.wid = params.wid;
+      }
+      if (params.offset !== undefined) {
+        requestParams.offset = params.offset;
+      }
+      if (params.length !== undefined) {
+        // 确保 length 不超过 500
+        requestParams.length = Math.min(params.length, 500);
+      }
+
+      // 调用API获取质检单列表（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/erp/sc/routing/deliveryReceipt/ReceiptOrderQc/getOrderList', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取质检单列表失败');
+      }
+
+      const qcList = response.data?.list || [];
+      const total = response.data?.total || 0;
+
+      // 保存到数据库
+      if (qcList && qcList.length > 0) {
+        await this.saveReceiptOrderQcList(accountId, qcList);
+      }
+
+      return {
+        data: qcList,
+        total: total
+      };
+    } catch (error) {
+      console.error('获取质检单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 保存质检单列表到数据库（只保存基本信息）
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} qcList - 质检单列表数据
+   */
+  async saveReceiptOrderQcList(accountId, qcList) {
+    try {
+      if (!prisma.lingXingReceiptOrderQc) {
+        console.error('Prisma Client 中未找到 lingXingReceiptOrderQc 模型');
+        return;
+      }
+
+      for (const qc of qcList) {
+        if (!qc.qc_sn) {
+          console.warn('质检单缺少 qc_sn，跳过保存');
+          continue;
+        }
+
+        // 提取基本信息字段
+        const qcIdValue = qc.qc_id || null;
+        const qcTypeValue = qc.qc_type !== undefined && qc.qc_type !== null ? String(qc.qc_type) : null;
+        const qcMethodValue = qc.qc_method !== undefined && qc.qc_method !== null ? String(qc.qc_method) : null;
+        const statusValue = qc.status !== undefined && qc.status !== null ? String(qc.status) : null;
+        const widValue = qc.wid !== undefined && qc.wid !== null
+          ? (typeof qc.wid === 'string' ? parseInt(qc.wid) : qc.wid)
+          : null;
+        const orderTypeValue = qc.order_type !== undefined && qc.order_type !== null ? String(qc.order_type) : null;
+        const productReceiveNumValue = qc.product_receive_num !== undefined && qc.product_receive_num !== null
+          ? parseInt(qc.product_receive_num)
+          : null;
+        const productGoodNumValue = qc.product_good_num !== undefined && qc.product_good_num !== null
+          ? parseInt(qc.product_good_num)
+          : null;
+        const productBadNumValue = qc.product_bad_num !== undefined && qc.product_bad_num !== null
+          ? parseInt(qc.product_bad_num)
+          : null;
+        const qcNumValue = qc.qc_num !== undefined && qc.qc_num !== null ? parseInt(qc.qc_num) : null;
+        const qcBadNumValue = qc.qc_bad_num !== undefined && qc.qc_bad_num !== null ? parseInt(qc.qc_bad_num) : null;
+        const productQcNumValue = qc.product_qc_num !== undefined && qc.product_qc_num !== null
+          ? parseInt(qc.product_qc_num)
+          : null;
+        const isComboValue = qc.is_combo !== undefined && qc.is_combo !== null ? parseInt(qc.is_combo) : null;
+        const isAuxValue = qc.is_aux !== undefined && qc.is_aux !== null ? parseInt(qc.is_aux) : null;
+        const supplierIdValue = qc.supplier_id !== undefined && qc.supplier_id !== null
+          ? (typeof qc.supplier_id === 'string' ? parseInt(qc.supplier_id) : qc.supplier_id)
+          : null;
+        const sourceValue = qc.source !== undefined && qc.source !== null ? parseInt(qc.source) : null;
+
+        // 处理 BigInt 类型字段
+        const receiveUidValue = qc.receive_uid !== undefined && qc.receive_uid !== null
+          ? (typeof qc.receive_uid === 'string' ? BigInt(qc.receive_uid) : BigInt(qc.receive_uid))
+          : null;
+        const qcUidValue = qc.qc_uid !== undefined && qc.qc_uid !== null
+          ? (typeof qc.qc_uid === 'string' ? BigInt(qc.qc_uid) : BigInt(qc.qc_uid))
+          : null;
+        const cgUidValue = qc.cg_uid !== undefined && qc.cg_uid !== null
+          ? (typeof qc.cg_uid === 'string' ? BigInt(qc.cg_uid) : BigInt(qc.cg_uid))
+          : null;
+        const productIdValue = qc.product_id !== undefined && qc.product_id !== null
+          ? (typeof qc.product_id === 'string' ? BigInt(qc.product_id) : BigInt(qc.product_id))
+          : null;
+        const priceValue = qc.price !== undefined && qc.price !== null && qc.price !== ''
+          ? parseFloat(qc.price) : null;
+
+        // 处理 qcRate 和 qcRatePass（可能包含百分号，需要移除）
+        const qcRateValue = qc.qc_rate !== undefined && qc.qc_rate !== null && qc.qc_rate !== ''
+          ? parseFloat(String(qc.qc_rate).replace('%', '')) : null;
+        const qcRatePassValue = qc.qc_rate_pass !== undefined && qc.qc_rate_pass !== null && qc.qc_rate_pass !== ''
+          ? parseFloat(String(qc.qc_rate_pass).replace('%', '')) : null;
+
+        // 使用 upsert 保存基本信息（如果已存在详情，只更新基本信息，不覆盖详情字段）
+        await prisma.lingXingReceiptOrderQc.upsert({
+          where: {
+            accountId_qcSn: {
+              accountId: accountId,
+              qcSn: qc.qc_sn
+            }
+          },
+          update: {
+            // 只更新基本信息字段，不更新详情字段
+            qcId: qcIdValue,
+            qcType: qcTypeValue,
+            qcTypeText: qc.qc_type_text || null,
+            qcMethod: qcMethodValue,
+            qcMethodText: qc.qc_method_text || null,
+            receiveTime: qc.receive_time || null,
+            receiveUid: receiveUidValue,
+            qcUid: qcUidValue,
+            sid: qc.sid || null,
+            productReceiveNum: productReceiveNumValue,
+            productGoodNum: productGoodNumValue,
+            productBadNum: productBadNumValue,
+            qcTime: qc.qc_time || null,
+            status: statusValue,
+            statusText: qc.status_text || null,
+            price: priceValue,
+            productId: productIdValue,
+            productName: qc.product_name || null,
+            sku: qc.sku || null,
+            wid: widValue,
+            orderId: qc.order_id || null,
+            orderSn: qc.order_sn || null,
+            orderType: orderTypeValue,
+            cgUid: cgUidValue,
+            fnsku: qc.fnsku || null,
+            qcNum: qcNumValue,
+            qcBadNum: qcBadNumValue,
+            qcRate: qcRateValue,
+            qcRatePass: qcRatePassValue,
+            qcRemark: qc.qc_remark || null,
+            productQcNum: productQcNumValue,
+            qcRealname: qc.qc_realname || null,
+            receiveRealname: qc.receive_realname || null,
+            optRealname: qc.opt_realname || null,
+            picUrl: qc.pic_url || null,
+            isCombo: isComboValue,
+            isAux: isAuxValue,
+            supplierId: supplierIdValue,
+            supplierName: qc.supplier_name || null,
+            source: sourceValue,
+            data: qc, // 保存完整数据
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            qcSn: qc.qc_sn,
+            qcId: qcIdValue,
+            qcType: qcTypeValue,
+            qcTypeText: qc.qc_type_text || null,
+            qcMethod: qcMethodValue,
+            qcMethodText: qc.qc_method_text || null,
+            receiveTime: qc.receive_time || null,
+            receiveUid: receiveUidValue,
+            qcUid: qcUidValue,
+            sid: qc.sid || null,
+            productReceiveNum: productReceiveNumValue,
+            productGoodNum: productGoodNumValue,
+            productBadNum: productBadNumValue,
+            qcTime: qc.qc_time || null,
+            status: statusValue,
+            statusText: qc.status_text || null,
+            price: priceValue,
+            productId: productIdValue,
+            productName: qc.product_name || null,
+            sku: qc.sku || null,
+            wid: widValue,
+            orderId: qc.order_id || null,
+            orderSn: qc.order_sn || null,
+            orderType: orderTypeValue,
+            cgUid: cgUidValue,
+            fnsku: qc.fnsku || null,
+            qcNum: qcNumValue,
+            qcBadNum: qcBadNumValue,
+            qcRate: qcRateValue,
+            qcRatePass: qcRatePassValue,
+            qcRemark: qc.qc_remark || null,
+            productQcNum: productQcNumValue,
+            qcRealname: qc.qc_realname || null,
+            receiveRealname: qc.receive_realname || null,
+            optRealname: qc.opt_realname || null,
+            picUrl: qc.pic_url || null,
+            isCombo: isComboValue,
+            isAux: isAuxValue,
+            supplierId: supplierIdValue,
+            supplierName: qc.supplier_name || null,
+            source: sourceValue,
+            data: qc // 保存完整数据
+          }
+        });
+      }
+
+      console.log(`质检单列表已保存到数据库: 共 ${qcList.length} 条记录`);
+    } catch (error) {
+      console.error('保存质检单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 保存质检单详情到数据库（只更新详情字段）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} qcDetail - 质检单详情数据
+   */
+  async saveReceiptOrderQcDetail(accountId, qcDetail) {
+    try {
+      // 检查 Prisma Client 是否包含新模型
+      if (!prisma.lingXingReceiptOrderQc) {
+        console.error('Prisma Client 中未找到 lingXingReceiptOrderQc 模型，请重新生成 Prisma Client 并重启服务器');
+        console.error('可用模型:', Object.keys(prisma).filter(k => k.includes('lingXing')).join(', '));
+        return;
+      }
+
+      if (!qcDetail.qc_sn) {
+        console.warn('质检单详情缺少 qc_sn，跳过保存');
+        return;
+      }
+
+      // 只更新详情字段，基本信息应该由列表保存方法处理
+      await prisma.lingXingReceiptOrderQc.update({
+        where: {
+          accountId_qcSn: {
+            accountId: accountId,
+            qcSn: qcDetail.qc_sn
+          }
+        },
+        data: {
+          // 只更新详情相关字段
+          qcImage: qcDetail.qc_image || null,
+          qcPicUrl: qcDetail.qc_pic_url || null,
+          whbCodeGood: qcDetail.whb_code_good || null,
+          whbCodeBad: qcDetail.whb_code_bad || null,
+          file: qcDetail.file || null,
+          image: qcDetail.image || null,
+          qcStandard: qcDetail.qc_standard || null,
+          customReceiveTime: qcDetail.custom_receive_time || null,
+          customQcTime: qcDetail.custom_qc_time || null,
+          deliveryOrderSn: qcDetail.delivery_order_sn || null,
+          sourceCustomOrderSn: qcDetail.source_custom_order_sn || null,
+          whbCodeGoodList: qcDetail.whb_code_good_list || null,
+          whbCodeBadList: qcDetail.whb_code_bad_list || null,
+          qcDetailData: qcDetail, // 保存完整数据
+          updatedAt: new Date()
+        }
+      });
+    } catch (error) {
+      // 如果记录不存在，记录警告但不抛出错误
+      if (error.code === 'P2025') {
+        console.warn(`质检单 ${qcDetail.qc_sn} 不存在，请先拉取列表`);
+      } else {
+        console.error('保存质检单详情到数据库失败:', error.message);
+        console.error('错误详情:', error);
+      }
+      // 不抛出错误，因为保存失败不应该影响API调用
+    }
+  }
+
+  /**
+   * 自动拉取所有质检单列表（自动处理分页）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} filterParams - 筛选参数（可选）
+   *   - date_type: 查询时间类型（可选）
+   *   - start_date: 开始时间（可选）
+   *   - end_date: 结束时间（可选）
+   *   - qc_sns: 质检单号（可选）
+   *   - status: 状态（可选）
+   *   - wid: 仓库id（可选）
+   * @param {Object} options - 选项
+   *   - pageSize: 每页大小（默认200，最大500）
+   *   - delayBetweenPages: 分页之间的延迟时间（毫秒，默认500）
+   *   - autoFetchDetails: 是否自动拉取并保存详情（默认true）
+   *   - delayBetweenDetails: 详情请求之间的延迟时间（毫秒，默认300）
+   *   - onProgress: 进度回调函数 (currentPage, totalPages, currentCount, totalCount) => void
+   * @returns {Promise<Object>} { qcList: [], total: 0, stats: {} }
+   */
+  async fetchAllReceiptOrderQcs(accountId, filterParams = {}, options = {}) {
+    const {
+      pageSize = 200,
+      delayBetweenPages = 500,
+      autoFetchDetails = true,
+      delayBetweenDetails = 300,
+      onProgress = null
+    } = options;
+
+    // 确保 pageSize 不超过 500
+    const actualPageSize = Math.min(pageSize, 500);
+
+    try {
+      console.log('开始自动拉取所有质检单列表...');
+
+      const allQcList = [];
+      let currentOffset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`正在获取质检单列表（offset: ${currentOffset}, length: ${actualPageSize}）...`);
+
+        try {
+          const pageResult = await this.getReceiptOrderQcList(accountId, {
+            ...filterParams,
+            offset: currentOffset,
+            length: actualPageSize
+          });
+
+          const pageQcList = pageResult.data || [];
+          const pageTotal = pageResult.total || 0;
+
+          if (currentOffset === 0) {
+            totalCount = pageTotal;
+            console.log(`总共需要获取 ${totalCount} 条质检单记录，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
+          }
+
+          allQcList.push(...pageQcList);
+          console.log(`获取完成，本页 ${pageQcList.length} 条记录，累计 ${allQcList.length} 条记录`);
+
+          if (onProgress) {
+            onProgress(Math.floor(currentOffset / actualPageSize) + 1, Math.ceil(totalCount / actualPageSize), allQcList.length, totalCount);
+          }
+
+          if (pageQcList.length < actualPageSize || allQcList.length >= totalCount) {
+            hasMore = false;
+          } else {
+            currentOffset += actualPageSize;
+            if (delayBetweenPages > 0) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+            }
+          }
+        } catch (error) {
+          console.error(`获取质检单列表失败:`, error.message);
+          if (allQcList.length === 0) {
+            throw error;
+          }
+          hasMore = false;
+        }
+      }
+
+      console.log(`所有质检单列表获取完成，共 ${allQcList.length} 条记录`);
+
+      // 自动拉取每个质检单的详情（保存逻辑已在 getReceiptOrderQcDetail 中处理）
+      if (autoFetchDetails && allQcList.length > 0) {
+        console.log('开始自动拉取质检单详情...');
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 0; i < allQcList.length; i++) {
+          const qc = allQcList[i];
+          if (!qc.qc_sn) {
+            console.warn(`第 ${i + 1} 条记录缺少 qc_sn，跳过`);
+            failCount++;
+            continue;
+          }
+
+          try {
+            console.log(`正在获取质检单详情 (${i + 1}/${allQcList.length}): ${qc.qc_sn}...`);
+            const detailResult = await this.getReceiptOrderQcDetail(accountId, { qc_sn: qc.qc_sn });
+            
+            if (detailResult.data) {
+              successCount++;
+              console.log(`质检单详情获取并保存成功: ${qc.qc_sn}`);
+            } else {
+              console.warn(`质检单详情为空: ${qc.qc_sn}`);
+              failCount++;
+            }
+
+            // 如果不是最后一条，延迟一下
+            if (i < allQcList.length - 1 && delayBetweenDetails > 0) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenDetails));
+            }
+          } catch (error) {
+            console.error(`获取质检单详情失败 (${qc.qc_sn}):`, error.message);
+            failCount++;
+            // 继续处理下一个，不中断整个流程
+          }
+        }
+
+        console.log(`质检单详情拉取完成: 成功 ${successCount} 条，失败 ${failCount} 条`);
+      }
+
+      return {
+        qcList: allQcList,
+        total: allQcList.length,
+        stats: {
+          totalQcs: allQcList.length,
+          pagesFetched: Math.floor(currentOffset / actualPageSize) + 1
+        }
+      };
+    } catch (error) {
+      console.error('自动拉取所有质检单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询质检单详情
+   * API: POST /basicOpen/qualityInspectionOrder/detail
+   * 支持查询质检单详情信息
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数
+   *   - qc_sn: 质检单号（必填）
+   * @returns {Promise<Object>} 质检单详情数据
+   */
+  async getReceiptOrderQcDetail(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 验证必填参数
+      if (!params.qc_sn) {
+        throw new Error('qc_sn 为必填参数');
+      }
+
+      // 构建请求参数
+      const requestParams = {
+        qc_sn: params.qc_sn
+      };
+
+      // 调用API获取质检单详情（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/basicOpen/qualityInspectionOrder/detail', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取质检单详情失败');
+      }
+
+      const qcDetail = response.data || {};
+
+      // 保存到数据库
+      if (qcDetail && Object.keys(qcDetail).length > 0) {
+        await this.saveReceiptOrderQcDetail(accountId, qcDetail);
+      }
+
+      return {
+        data: qcDetail
+      };
+    } catch (error) {
+      console.error('获取质检单详情失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询入库单列表
+   * API: POST /erp/sc/routing/storage/inbound/getOrders
+   * 支持查询入库单列表，对应系统【仓库】>【入库单】数据
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数（所有参数都是可选的）
+   *   - offset: 分页偏移量（可选，默认0）
+   *   - length: 分页长度（可选，默认20，上限200）
+   *   - wid: 系统仓库id（可选）
+   *   - search_field_time: 日期筛选类型（可选）：create_time 创建时间，opt_time 入库时间，increment_time 更新时间
+   *   - start_date: 日期查询开始时间，格式：Y-m-d，当筛选更新时间时，支持Y-m-d或Y-m-d H:i:s（可选）
+   *   - end_date: 日期查询结束时间，格式：Y-m-d，当筛选更新时间时，支持Y-m-d或Y-m-d H:i:s（可选）
+   *   - order_sn: 入库单单号，多个使用英文逗号分隔（可选）
+   *   - inbound_idempotent_code: 客户参考单号，多个使用英文逗号分隔（可选）
+   *   - status: 入库单状态（可选）：10 待提交，20 待入库，40 已完成，50 已撤销，121 待审批，122 已驳回
+   *   - type: 入库类型（可选）：-1 其他入库（含所有自定义类型），1 其他入库（非自定义类型），2 采购入库，3 调拨入库，4 赠品入库，26 退货入库，27 移除入库
+   * @returns {Promise<Object>} 入库单列表数据 { data: [], total: 0 }
+   */
+  async getInboundOrderList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 构建请求参数（所有参数都是可选的）
+      const requestParams = {};
+      if (params.offset !== undefined) {
+        requestParams.offset = params.offset;
+      }
+      if (params.length !== undefined) {
+        // 确保 length 不超过 200
+        requestParams.length = Math.min(params.length, 200);
+      }
+      if (params.wid !== undefined) {
+        requestParams.wid = params.wid;
+      }
+      if (params.search_field_time !== undefined) {
+        requestParams.search_field_time = params.search_field_time;
+      }
+      if (params.start_date !== undefined) {
+        requestParams.start_date = params.start_date;
+      }
+      if (params.end_date !== undefined) {
+        requestParams.end_date = params.end_date;
+      }
+      if (params.order_sn !== undefined) {
+        requestParams.order_sn = params.order_sn;
+      }
+      if (params.inbound_idempotent_code !== undefined) {
+        requestParams.inbound_idempotent_code = params.inbound_idempotent_code;
+      }
+      if (params.status !== undefined) {
+        requestParams.status = params.status;
+      }
+      if (params.type !== undefined) {
+        requestParams.type = params.type;
+      }
+
+      // 调用API获取入库单列表（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/erp/sc/routing/storage/inbound/getOrders', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取入库单列表失败');
+      }
+
+      const inboundOrderList = response.data || [];
+      const total = response.total || 0;
+
+      // 保存到数据库
+      if (inboundOrderList && inboundOrderList.length > 0) {
+        await this.saveInboundOrders(accountId, inboundOrderList);
+      }
+
+      return {
+        data: inboundOrderList,
+        total: total
+      };
+    } catch (error) {
+      console.error('获取入库单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 自动拉取所有入库单列表（自动处理分页）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} filterParams - 筛选参数（可选）
+   *   - wid: 系统仓库id（可选）
+   *   - search_field_time: 日期筛选类型（可选）
+   *   - start_date: 日期查询开始时间（可选）
+   *   - end_date: 日期查询结束时间（可选）
+   *   - order_sn: 入库单单号（可选）
+   *   - inbound_idempotent_code: 客户参考单号（可选）
+   *   - status: 入库单状态（可选）
+   *   - type: 入库类型（可选）
+   * @param {Object} options - 选项
+   *   - pageSize: 每页大小（默认200，最大200）
+   *   - delayBetweenPages: 分页之间的延迟时间（毫秒，默认500）
+   *   - onProgress: 进度回调函数 (currentPage, totalPages, currentCount, totalCount) => void
+   * @returns {Promise<Object>} { inboundOrderList: [], total: 0, stats: {} }
+   */
+  async fetchAllInboundOrders(accountId, filterParams = {}, options = {}) {
+    const {
+      pageSize = 200,
+      delayBetweenPages = 500,
+      onProgress = null
+    } = options;
+
+    // 确保 pageSize 不超过 200
+    const actualPageSize = Math.min(pageSize, 200);
+
+    try {
+      console.log('开始自动拉取所有入库单列表...');
+
+      const allInboundOrderList = [];
+      let currentOffset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`正在获取入库单列表（offset: ${currentOffset}, length: ${actualPageSize}）...`);
+
+        try {
+          const pageResult = await this.getInboundOrderList(accountId, {
+            ...filterParams,
+            offset: currentOffset,
+            length: actualPageSize
+          });
+
+          const pageInboundOrderList = pageResult.data || [];
+          const pageTotal = pageResult.total || 0;
+
+          if (currentOffset === 0) {
+            totalCount = pageTotal;
+            console.log(`总共需要获取 ${totalCount} 条入库单记录，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
+          }
+
+          allInboundOrderList.push(...pageInboundOrderList);
+          console.log(`获取完成，本页 ${pageInboundOrderList.length} 条记录，累计 ${allInboundOrderList.length} 条记录`);
+
+          if (onProgress) {
+            onProgress(Math.floor(currentOffset / actualPageSize) + 1, Math.ceil(totalCount / actualPageSize), allInboundOrderList.length, totalCount);
+          }
+
+          if (pageInboundOrderList.length < actualPageSize || allInboundOrderList.length >= totalCount) {
+            hasMore = false;
+          } else {
+            currentOffset += actualPageSize;
+            if (delayBetweenPages > 0) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+            }
+          }
+        } catch (error) {
+          console.error(`获取入库单列表失败:`, error.message);
+          if (allInboundOrderList.length === 0) {
+            throw error;
+          }
+          hasMore = false;
+        }
+      }
+
+      console.log(`所有入库单列表获取完成，共 ${allInboundOrderList.length} 条记录`);
+
+      return {
+        inboundOrderList: allInboundOrderList,
+        total: allInboundOrderList.length,
+        stats: {
+          totalInboundOrders: allInboundOrderList.length,
+          pagesFetched: Math.floor(currentOffset / actualPageSize) + 1
+        }
+      };
+    } catch (error) {
+      console.error('自动拉取所有入库单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询出库单列表
+   * API: POST /erp/sc/routing/storage/outbound/getOrders
+   * 支持查询出库单列表，对应系统【仓库】>【出库单】数据
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数（所有参数都是可选的）
+   *   - offset: 分页偏移量（可选，默认0）
+   *   - length: 分页长度（可选，默认20，上限200）
+   *   - wid: 系统仓库id（可选）
+   *   - search_field_time: 日期筛选类型（可选）：create_time 创建时间，opt_time 出库时间，increment_time 更新时间
+   *   - start_date: 日期查询开始时间，格式：Y-m-d，当筛选更新时间时，支持Y-m-d或Y-m-d H:i:s（可选）
+   *   - end_date: 日期查询结束时间，格式：Y-m-d，当筛选更新时间时，支持Y-m-d或Y-m-d H:i:s（可选）
+   *   - order_sn: 出库单单号，多个使用英文逗号分隔（可选）
+   *   - idempotent_code: 客户参考号，多个使用英文逗号分隔（可选）
+   *   - status: 出库单状态（可选）：10 待提交，30 待出库，40 已完成，50 已撤销，121 待审批，122 已驳回
+   *   - type: 出库类型（可选）：11 其他出库，12 FBA出库，14 退货出库，15 调拨出库，16 WFS出库，17 Temu出库
+   * @returns {Promise<Object>} 出库单列表数据 { data: [], total: 0 }
+   */
+  async getOutboundOrderList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 构建请求参数（所有参数都是可选的）
+      const requestParams = {};
+      if (params.offset !== undefined) {
+        requestParams.offset = params.offset;
+      }
+      if (params.length !== undefined) {
+        // 确保 length 不超过 200
+        requestParams.length = Math.min(params.length, 200);
+      }
+      if (params.wid !== undefined) {
+        requestParams.wid = params.wid;
+      }
+      if (params.search_field_time !== undefined) {
+        requestParams.search_field_time = params.search_field_time;
+      }
+      if (params.start_date !== undefined) {
+        requestParams.start_date = params.start_date;
+      }
+      if (params.end_date !== undefined) {
+        requestParams.end_date = params.end_date;
+      }
+      if (params.order_sn !== undefined) {
+        requestParams.order_sn = params.order_sn;
+      }
+      if (params.idempotent_code !== undefined) {
+        requestParams.idempotent_code = params.idempotent_code;
+      }
+      if (params.status !== undefined) {
+        requestParams.status = params.status;
+      }
+      if (params.type !== undefined) {
+        requestParams.type = params.type;
+      }
+
+      // 调用API获取出库单列表（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/erp/sc/routing/storage/outbound/getOrders', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取出库单列表失败');
+      }
+
+      const outboundOrderList = response.data || [];
+      const total = response.total || 0;
+
+      // 保存到数据库
+      if (outboundOrderList && outboundOrderList.length > 0) {
+        await this.saveOutboundOrders(accountId, outboundOrderList);
+      }
+
+      return {
+        data: outboundOrderList,
+        total: total
+      };
+    } catch (error) {
+      console.error('获取出库单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 自动拉取所有出库单列表（自动处理分页）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} filterParams - 筛选参数（可选）
+   *   - wid: 系统仓库id（可选）
+   *   - search_field_time: 日期筛选类型（可选）
+   *   - start_date: 日期查询开始时间（可选）
+   *   - end_date: 日期查询结束时间（可选）
+   *   - order_sn: 出库单单号（可选）
+   *   - idempotent_code: 客户参考号（可选）
+   *   - status: 出库单状态（可选）
+   *   - type: 出库类型（可选）
+   * @param {Object} options - 选项
+   *   - pageSize: 每页大小（默认200，最大200）
+   *   - delayBetweenPages: 分页之间的延迟时间（毫秒，默认500）
+   *   - onProgress: 进度回调函数 (currentPage, totalPages, currentCount, totalCount) => void
+   * @returns {Promise<Object>} { outboundOrderList: [], total: 0, stats: {} }
+   */
+  async fetchAllOutboundOrders(accountId, filterParams = {}, options = {}) {
+    const {
+      pageSize = 200,
+      delayBetweenPages = 500,
+      onProgress = null
+    } = options;
+
+    // 确保 pageSize 不超过 200
+    const actualPageSize = Math.min(pageSize, 200);
+
+    try {
+      console.log('开始自动拉取所有出库单列表...');
+
+      const allOutboundOrderList = [];
+      let currentOffset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`正在获取出库单列表（offset: ${currentOffset}, length: ${actualPageSize}）...`);
+
+        try {
+          const pageResult = await this.getOutboundOrderList(accountId, {
+            ...filterParams,
+            offset: currentOffset,
+            length: actualPageSize
+          });
+
+          const pageOutboundOrderList = pageResult.data || [];
+          const pageTotal = pageResult.total || 0;
+
+          if (currentOffset === 0) {
+            totalCount = pageTotal;
+            console.log(`总共需要获取 ${totalCount} 条出库单记录，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
+          }
+
+          allOutboundOrderList.push(...pageOutboundOrderList);
+          console.log(`获取完成，本页 ${pageOutboundOrderList.length} 条记录，累计 ${allOutboundOrderList.length} 条记录`);
+
+          if (onProgress) {
+            onProgress(Math.floor(currentOffset / actualPageSize) + 1, Math.ceil(totalCount / actualPageSize), allOutboundOrderList.length, totalCount);
+          }
+
+          if (pageOutboundOrderList.length < actualPageSize || allOutboundOrderList.length >= totalCount) {
+            hasMore = false;
+          } else {
+            currentOffset += actualPageSize;
+            if (delayBetweenPages > 0) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+            }
+          }
+        } catch (error) {
+          console.error(`获取出库单列表失败:`, error.message);
+          if (allOutboundOrderList.length === 0) {
+            throw error;
+          }
+          hasMore = false;
+        }
+      }
+
+      console.log(`所有出库单列表获取完成，共 ${allOutboundOrderList.length} 条记录`);
+
+      return {
+        outboundOrderList: allOutboundOrderList,
+        total: allOutboundOrderList.length,
+        stats: {
+          totalOutboundOrders: allOutboundOrderList.length,
+          pagesFetched: Math.floor(currentOffset / actualPageSize) + 1
+        }
+      };
+    } catch (error) {
+      console.error('自动拉取所有出库单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询海外仓备货单列表
+   * API: POST /erp/sc/routing/owms/inbound/listInbound
+   * 支持查询海外仓备货单列表，对应系统【仓库】>【海外仓备货单】数据
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数（所有参数都是可选的）
+   *   - status: 状态（可选）：10 待审核，20 已驳回，30 待配货，40 待发货，50 待收货，51 已撤销，60 已完成
+   *   - sub_status: 子状态（可选，仅在待收货状态下生效）：0 全部，1 未收货，2 部分收货
+   *   - s_wid: 发货仓库id（可选，数组）
+   *   - r_wid: 收货仓库id（可选，数组）
+   *   - overseas_order_no: 备货单号（可选）
+   *   - create_time_from: 查询开始日期，格式：Y-m-d（可选）
+   *   - create_time_to: 查询结束日期，格式：Y-m-d（可选）
+   *   - page_size: 分页数量，最大50，默认20（可选）
+   *   - page: 当前页码，默认1（可选）
+   *   - date_type: 备货单时间查询类型（可选）：delivery_time 发货时间，create_time 创建时间，receive_time 收货时间，update_time 更新时间
+   *   - is_delete: 订单是否删除（可选）：0 未删除，1 已删除，2 全部
+   * @returns {Promise<Object>} 备货单列表数据 { data: [], total: 0 }
+   */
+  async getOverseasWarehouseStockOrderList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 构建请求参数（所有参数都是可选的）
+      const requestParams = {};
+      if (params.status !== undefined) {
+        requestParams.status = params.status;
+      }
+      if (params.sub_status !== undefined) {
+        requestParams.sub_status = params.sub_status;
+      }
+      if (params.s_wid !== undefined) {
+        requestParams.s_wid = params.s_wid;
+      }
+      if (params.r_wid !== undefined) {
+        requestParams.r_wid = params.r_wid;
+      }
+      if (params.overseas_order_no !== undefined) {
+        requestParams.overseas_order_no = params.overseas_order_no;
+      }
+      if (params.create_time_from !== undefined) {
+        requestParams.create_time_from = params.create_time_from;
+      }
+      if (params.create_time_to !== undefined) {
+        requestParams.create_time_to = params.create_time_to;
+      }
+      if (params.page_size !== undefined) {
+        // 确保 page_size 不超过 50
+        requestParams.page_size = Math.min(params.page_size, 50);
+      }
+      if (params.page !== undefined) {
+        requestParams.page = params.page;
+      }
+      if (params.date_type !== undefined) {
+        requestParams.date_type = params.date_type;
+      }
+      if (params.is_delete !== undefined) {
+        requestParams.is_delete = params.is_delete;
+      }
+
+      // 调用API获取备货单列表（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/erp/sc/routing/owms/inbound/listInbound', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取海外仓备货单列表失败');
+      }
+
+      const stockOrderList = response.data || [];
+      const total = response.total || 0;
+
+      // 保存到数据库
+      if (stockOrderList && stockOrderList.length > 0) {
+        await this.saveOverseasWarehouseStockOrders(accountId, stockOrderList);
+      }
+
+      return {
+        data: stockOrderList,
+        total: total
+      };
+    } catch (error) {
+      console.error('获取海外仓备货单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 保存海外仓备货单列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} stockOrders - 海外仓备货单列表数据
+   */
+  async saveOverseasWarehouseStockOrders(accountId, stockOrders) {
+    try {
+      if (!prisma.lingXingOverseasWarehouseStockOrder) {
+        console.error('Prisma Client 中未找到 lingXingOverseasWarehouseStockOrder 模型');
+        return;
+      }
+
+      for (const order of stockOrders) {
+        // 使用 overseas_order_no 作为唯一键
+        const overseasOrderNo = order.overseas_order_no || order.overseasOrderNo || order.order_no || order.orderNo;
+        
+        // 跳过缺少必要字段的记录
+        if (!overseasOrderNo) {
+          console.warn('跳过缺少 overseas_order_no 的海外仓备货单记录:', order);
+          continue;
+        }
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, overseasOrderNo
+        await prisma.lingXingOverseasWarehouseStockOrder.upsert({
+          where: {
+            accountId_overseasOrderNo: {
+              accountId: accountId,
+              overseasOrderNo: overseasOrderNo
+            }
+          },
+          update: {
+            data: order,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            overseasOrderNo: overseasOrderNo,
+            data: order
+          }
+        });
+      }
+
+      console.log(`海外仓备货单列表已保存到数据库: 共 ${stockOrders.length} 条记录`);
+    } catch (error) {
+      console.error('保存海外仓备货单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 自动拉取所有海外仓备货单列表（自动处理分页）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} filterParams - 筛选参数（可选）
+   *   - status: 状态（可选）
+   *   - sub_status: 子状态（可选）
+   *   - s_wid: 发货仓库id（可选）
+   *   - r_wid: 收货仓库id（可选）
+   *   - overseas_order_no: 备货单号（可选）
+   *   - create_time_from: 查询开始日期（可选）
+   *   - create_time_to: 查询结束日期（可选）
+   *   - date_type: 备货单时间查询类型（可选）
+   *   - is_delete: 订单是否删除（可选）
+   * @param {Object} options - 选项
+   *   - pageSize: 每页大小（默认50，最大50）
+   *   - delayBetweenPages: 分页之间的延迟时间（毫秒，默认500）
+   *   - onProgress: 进度回调函数 (currentPage, totalPages, currentCount, totalCount) => void
+   * @returns {Promise<Object>} { stockOrderList: [], total: 0, stats: {} }
+   */
+  async fetchAllOverseasWarehouseStockOrders(accountId, filterParams = {}, options = {}) {
+    const {
+      pageSize = 50,
+      delayBetweenPages = 500,
+      onProgress = null
+    } = options;
+
+    // 确保 pageSize 不超过 50
+    const actualPageSize = Math.min(pageSize, 50);
+
+    try {
+      console.log('开始自动拉取所有海外仓备货单列表...');
+
+      const allStockOrderList = [];
+      let currentPage = 1;
+      let totalCount = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`正在获取备货单列表（page: ${currentPage}, page_size: ${actualPageSize}）...`);
+
+        try {
+          const pageResult = await this.getOverseasWarehouseStockOrderList(accountId, {
+            ...filterParams,
+            page: currentPage,
+            page_size: actualPageSize
+          });
+
+          const pageStockOrderList = pageResult.data || [];
+          const pageTotal = pageResult.total || 0;
+
+          if (currentPage === 1) {
+            totalCount = pageTotal;
+            console.log(`总共需要获取 ${totalCount} 条备货单记录，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
+          }
+
+          allStockOrderList.push(...pageStockOrderList);
+          console.log(`获取完成，本页 ${pageStockOrderList.length} 条记录，累计 ${allStockOrderList.length} 条记录`);
+
+          if (onProgress) {
+            onProgress(currentPage, Math.ceil(totalCount / actualPageSize), allStockOrderList.length, totalCount);
+          }
+
+          if (pageStockOrderList.length < actualPageSize || allStockOrderList.length >= totalCount) {
+            hasMore = false;
+          } else {
+            currentPage++;
+            if (delayBetweenPages > 0) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+            }
+          }
+        } catch (error) {
+          console.error(`获取备货单列表失败:`, error.message);
+          if (allStockOrderList.length === 0) {
+            throw error;
+          }
+          hasMore = false;
+        }
+      }
+
+      console.log(`所有海外仓备货单列表获取完成，共 ${allStockOrderList.length} 条记录`);
+
+      return {
+        stockOrderList: allStockOrderList,
+        total: allStockOrderList.length,
+        stats: {
+          totalStockOrders: allStockOrderList.length,
+          pagesFetched: currentPage
+        }
+      };
+    } catch (error) {
+      console.error('自动拉取所有海外仓备货单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询备货单详情
+   * API: POST /basicOpen/overSeaWarehouse/stockOrder/detail
+   * 支持查询备货单详情信息
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数
+   *   - overseas_order_no: 备货单号（必填）
+   * @returns {Promise<Object>} 备货单详情数据
+   */
+  async getOverseasWarehouseStockOrderDetail(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 验证必填参数
+      if (!params.overseas_order_no) {
+        throw new Error('overseas_order_no 为必填参数');
+      }
+
+      // 构建请求参数
+      const requestParams = {
+        overseas_order_no: params.overseas_order_no
+      };
+
+      // 调用API获取备货单详情（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/basicOpen/overSeaWarehouse/stockOrder/detail', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取备货单详情失败');
+      }
+
+      const stockOrderDetail = response.data || {};
+
+      return {
+        data: stockOrderDetail
+      };
+    } catch (error) {
+      console.error('获取备货单详情失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询销售出库单列表
+   * API: POST /erp/sc/routing/wms/order/wmsOrderList
+   * 支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单
+   * 默认返回一个月内审核出库的数据，超过一个月请加上时间入参
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数（所有参数都是可选的）
+   *   - page: 分页页码（可选，默认1）
+   *   - page_size: 分页长度（可选，默认20，上限200）
+   *   - sid_arr: 店铺id（可选，数组）
+   *   - status_arr: 状态（可选，数组）：1 物流下单，2 发货中，3 已发货，4 已删除
+   *   - logistics_status_arr: 物流状态（可选，数组）：1 待导入，2 物流待下单，3 物流下单中，4 下单异常，5 下单完成，6 待海外仓下单，7 海外仓下单中，11 待导入国内物流，41 物流取消中，42 物流取消异常，43 物流取消完成
+   *   - platform_order_no_arr: 平台单号（可选，数组）
+   *   - order_number_arr: 系统单号（可选，数组）
+   *   - wo_number_arr: 销售出库单号（可选，数组）
+   *   - time_type: 时间类型（可选）：create_at 创建时间，delivered_at 出库时间，stock_delivered_at 流水出库时间，update_at 变更时间
+   *   - start_date: 开始日期，格式：Y-m-d，默认为最近1个月（可选）
+   *   - end_date: 结束日期，格式：Y-m-d，默认为最近1个月（可选）
+   * @returns {Promise<Object>} 销售出库单列表数据 { data: [], total: 0 }
+   */
+  async getWmsOrderList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      // 构建请求参数（所有参数都是可选的）
+      const requestParams = {};
+      if (params.page !== undefined) {
+        requestParams.page = params.page;
+      }
+      if (params.page_size !== undefined) {
+        // 确保 page_size 不超过 200
+        requestParams.page_size = Math.min(params.page_size, 200);
+      }
+      if (params.sid_arr !== undefined) {
+        requestParams.sid_arr = params.sid_arr;
+      }
+      if (params.status_arr !== undefined) {
+        requestParams.status_arr = params.status_arr;
+      }
+      if (params.logistics_status_arr !== undefined) {
+        requestParams.logistics_status_arr = params.logistics_status_arr;
+      }
+      if (params.platform_order_no_arr !== undefined) {
+        requestParams.platform_order_no_arr = params.platform_order_no_arr;
+      }
+      if (params.order_number_arr !== undefined) {
+        requestParams.order_number_arr = params.order_number_arr;
+      }
+      if (params.wo_number_arr !== undefined) {
+        requestParams.wo_number_arr = params.wo_number_arr;
+      }
+      if (params.time_type !== undefined) {
+        requestParams.time_type = params.time_type;
+      }
+      if (params.start_date !== undefined) {
+        requestParams.start_date = params.start_date;
+      }
+      if (params.end_date !== undefined) {
+        requestParams.end_date = params.end_date;
+      }
+
+      // 调用API获取销售出库单列表（使用通用客户端，成功码为0，令牌桶容量为1）
+      const response = await this.post(account, '/erp/sc/routing/wms/order/wmsOrderList', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      // 检查响应格式（注意：这个接口返回的code是0表示成功）
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取销售出库单列表失败');
+      }
+
+      const wmsOrderList = response.data || [];
+      const total = response.total || 0;
+
+      // 保存到数据库
+      if (wmsOrderList && wmsOrderList.length > 0) {
+        await this.saveWmsOrders(accountId, wmsOrderList);
+      }
+
+      return {
+        data: wmsOrderList,
+        total: total
+      };
+    } catch (error) {
+      console.error('获取销售出库单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 保存WMS销售出库单列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} wmsOrders - WMS销售出库单列表数据
+   */
+  async saveWmsOrders(accountId, wmsOrders) {
+    try {
+      if (!prisma.lingXingWmsOrder) {
+        console.error('Prisma Client 中未找到 lingXingWmsOrder 模型');
+        return;
+      }
+
+      for (const order of wmsOrders) {
+        // 使用 wo_number 作为唯一键
+        const woNumber = order.wo_number || order.woNumber || order.order_number || order.orderNumber;
+        
+        // 跳过缺少必要字段的记录
+        if (!woNumber) {
+          console.warn('跳过缺少 wo_number 的WMS销售出库单记录:', order);
+          continue;
+        }
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, woNumber
+        await prisma.lingXingWmsOrder.upsert({
+          where: {
+            accountId_woNumber: {
+              accountId: accountId,
+              woNumber: woNumber
+            }
+          },
+          update: {
+            data: order,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            woNumber: woNumber,
+            data: order
+          }
+        });
+      }
+
+      console.log(`WMS销售出库单列表已保存到数据库: 共 ${wmsOrders.length} 条记录`);
+    } catch (error) {
+      console.error('保存WMS销售出库单列表到数据库失败:', error.message);
+      console.error('错误详情:', error);
+    }
+  }
+
+  /**
+   * 自动拉取所有销售出库单列表（自动处理分页）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} filterParams - 筛选参数（可选）
+   *   - sid_arr: 店铺id（可选）
+   *   - status_arr: 状态（可选）
+   *   - logistics_status_arr: 物流状态（可选）
+   *   - platform_order_no_arr: 平台单号（可选）
+   *   - order_number_arr: 系统单号（可选）
+   *   - wo_number_arr: 销售出库单号（可选）
+   *   - time_type: 时间类型（可选）
+   *   - start_date: 开始日期（可选）
+   *   - end_date: 结束日期（可选）
+   * @param {Object} options - 选项
+   *   - pageSize: 每页大小（默认200，最大200）
+   *   - delayBetweenPages: 分页之间的延迟时间（毫秒，默认500）
+   *   - onProgress: 进度回调函数 (currentPage, totalPages, currentCount, totalCount) => void
+   * @returns {Promise<Object>} { wmsOrderList: [], total: 0, stats: {} }
+   */
+  async fetchAllWmsOrders(accountId, filterParams = {}, options = {}) {
+    const {
+      pageSize = 200,
+      delayBetweenPages = 500,
+      onProgress = null
+    } = options;
+
+    // 确保 pageSize 不超过 200
+    const actualPageSize = Math.min(pageSize, 200);
+
+    try {
+      console.log('开始自动拉取所有销售出库单列表...');
+
+      const allWmsOrderList = [];
+      let currentPage = 1;
+      let totalCount = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`正在获取销售出库单列表（page: ${currentPage}, page_size: ${actualPageSize}）...`);
+
+        try {
+          const pageResult = await this.getWmsOrderList(accountId, {
+            ...filterParams,
+            page: currentPage,
+            page_size: actualPageSize
+          });
+
+          const pageWmsOrderList = pageResult.data || [];
+          const pageTotal = pageResult.total || 0;
+
+          if (currentPage === 1) {
+            totalCount = pageTotal;
+            console.log(`总共需要获取 ${totalCount} 条销售出库单记录，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
+          }
+
+          allWmsOrderList.push(...pageWmsOrderList);
+          console.log(`获取完成，本页 ${pageWmsOrderList.length} 条记录，累计 ${allWmsOrderList.length} 条记录`);
+
+          if (onProgress) {
+            onProgress(currentPage, Math.ceil(totalCount / actualPageSize), allWmsOrderList.length, totalCount);
+          }
+
+          if (pageWmsOrderList.length < actualPageSize || allWmsOrderList.length >= totalCount) {
+            hasMore = false;
+          } else {
+            currentPage++;
+            if (delayBetweenPages > 0) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+            }
+          }
+        } catch (error) {
+          console.error(`获取销售出库单列表失败:`, error.message);
+          if (allWmsOrderList.length === 0) {
+            throw error;
+          }
+          hasMore = false;
+        }
+      }
+
+      console.log(`所有销售出库单列表获取完成，共 ${allWmsOrderList.length} 条记录`);
+
+      return {
+        wmsOrderList: allWmsOrderList,
+        total: allWmsOrderList.length,
+        stats: {
+          totalWmsOrders: allWmsOrderList.length,
+          pagesFetched: currentPage
+        }
+      };
+    } catch (error) {
+      console.error('自动拉取所有销售出库单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 保存库存明细列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} inventoryDetails - 库存明细列表数据
+   */
+  async saveInventoryDetails(accountId, inventoryDetails) {
+    try {
+      if (!prisma.lingXingInventoryDetail) {
+        console.error('Prisma Client 中未找到 lingXingInventoryDetail 模型');
+        return;
+      }
+
+      for (const detail of inventoryDetails) {
+        // 跳过没有 wid 或 product_id 的记录（这些字段是唯一键的一部分）
+        // 使用 product_id 而不是 sku 作为唯一键，因为同一SKU可能对应不同的product_id
+        if (!detail.wid) {
+          continue;
+        }
+
+        const wid = String(detail.wid);
+        const sku = detail.sku ? String(detail.sku) : null;
+
+        // 提取关键字段 - product_id 是唯一键的一部分，必须存在
+        const productId = detail.product_id || detail.productId;
+        if (!productId) {
+          // 如果没有 product_id，跳过这条记录（因为它是唯一键的一部分）
+          console.warn('跳过缺少 product_id 的库存明细记录:', detail);
+          continue;
+        }
+        
+        const productIdValue = typeof productId === 'string' 
+          ? BigInt(productId) 
+          : BigInt(productId);
+        
+        const quantity = detail.product_total !== undefined && detail.product_total !== null 
+          ? parseInt(detail.product_total) 
+          : null;
+        
+        const purchasePrice = detail.purchase_price !== undefined && detail.purchase_price !== null && detail.purchase_price !== ''
+          ? parseFloat(detail.purchase_price)
+          : (detail.purchasePrice !== undefined && detail.purchasePrice !== null && detail.purchasePrice !== ''
+              ? parseFloat(detail.purchasePrice)
+              : null);
+        
+        const stockPrice = detail.stock_price !== undefined && detail.stock_price !== null && detail.stock_price !== ''
+          ? parseFloat(detail.stock_price)
+          : (detail.stockPrice !== undefined && detail.stockPrice !== null && detail.stockPrice !== ''
+              ? parseFloat(detail.stockPrice)
+              : null);
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, wid, productId
+        await prisma.lingXingInventoryDetail.upsert({
+          where: {
+            accountId_wid_productId: {
+              accountId: accountId,
+              wid: wid,
+              productId: productIdValue
+            }
+          },
+          update: {
+            sku: sku,
+            productId: productIdValue,
+            quantity: quantity,
+            purchasePrice: purchasePrice,
+            stockPrice: stockPrice,
+            data: detail,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            wid: wid,
+            sku: sku,
+            productId: productIdValue,
+            quantity: quantity,
+            purchasePrice: purchasePrice,
+            stockPrice: stockPrice,
+            data: detail
+          }
+        });
+      }
+
+      console.log(`库存明细列表已保存到数据库: 共 ${inventoryDetails.length} 条记录`);
+    } catch (error) {
+      console.error('保存库存明细列表到数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 保存仓位库存明细列表到数据库
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} inventoryBinDetails - 仓位库存明细列表数据
+   */
+  async saveInventoryBinDetails(accountId, inventoryBinDetails) {
+    try {
+      if (!prisma.lingXingInventoryBinDetail) {
+        console.error('Prisma Client 中未找到 lingXingInventoryBinDetail 模型');
+        return;
+      }
+
+      for (const detail of inventoryBinDetails) {
+        // 跳过没有 wid、whb_id 或 product_id 的记录（这些字段是唯一键的一部分）
+        // API返回的字段是 whb_id（仓位id），不是 binId
+        const binId = detail.whb_id || detail.whbId || detail.bin_id || detail.binId;
+        if (!detail.wid || !binId) {
+          continue;
+        }
+
+        const wid = String(detail.wid);
+        const binIdStr = String(binId);
+
+        // 提取关键字段 - product_id 是唯一键的一部分，必须存在
+        const productId = detail.product_id || detail.productId;
+        if (!productId) {
+          // 如果没有 product_id，跳过这条记录（因为它是唯一键的一部分）
+          console.warn('跳过缺少 product_id 的仓位库存明细记录:', detail);
+          continue;
+        }
+        
+        const productIdValue = typeof productId === 'string' 
+          ? BigInt(productId) 
+          : BigInt(productId);
+        
+        // API返回的数量字段是 total
+        const quantity = detail.total !== undefined && detail.total !== null 
+          ? parseInt(detail.total) 
+          : (detail.product_total !== undefined && detail.product_total !== null 
+              ? parseInt(detail.product_total) 
+              : (detail.quantity !== undefined && detail.quantity !== null 
+                  ? parseInt(detail.quantity) 
+                  : null));
+
+        // 使用 upsert 避免重复数据，唯一键包含 accountId, wid, binId, productId
+        await prisma.lingXingInventoryBinDetail.upsert({
+          where: {
+            accountId_wid_binId_productId: {
+              accountId: accountId,
+              wid: wid,
+              binId: binIdStr,
+              productId: productIdValue
+            }
+          },
+          update: {
+            productId: productIdValue,
+            quantity: quantity,
+            data: detail,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId: accountId,
+            wid: wid,
+            binId: binIdStr,
+            productId: productIdValue,
+            quantity: quantity,
+            data: detail
+          }
+        });
+      }
+
+      console.log(`仓位库存明细列表已保存到数据库: 共 ${inventoryBinDetails.length} 条记录`);
+    } catch (error) {
+      console.error('保存仓位库存明细列表到数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 收货单增量同步（优先按更新时间 date_type: 4）
+   */
+  async incrementalSyncPurchaseReceiptOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseReceiptOrder',
+      { ...options, extraParams: { date_type: options.date_type ?? 4 } },
+      async (id, params, opts) => this.fetchAllPurchaseReceiptOrders(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 入库单增量同步（优先按更新时间 search_field_time: increment_time）
+   */
+  async incrementalSyncInboundOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'inboundOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'increment_time' } },
+      async (id, params, opts) => this.fetchAllInboundOrders(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 出库单增量同步（优先按更新时间 search_field_time: increment_time）
+   */
+  async incrementalSyncOutboundOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'outboundOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'increment_time' } },
+      async (id, params, opts) => this.fetchAllOutboundOrders(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 }
 

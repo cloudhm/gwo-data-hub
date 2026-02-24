@@ -715,6 +715,644 @@ async function lingxingWarehouseRoutes(fastify, options) {
       });
     }
   });
+
+  /**
+   * 查询收货单列表
+   * POST /api/lingxing/warehouse/purchase-receipt-orders/:accountId
+   * Body: {
+   *   date_type: 1,                    // 查询时间类型（可选）：1 预计到货时间，2 收货时间，3 创建时间，4 更新时间
+   *   start_date: "2024-07-29",        // 开始时间，格式：Y-m-d，当筛选更新时间时，支持Y-m-d或Y-m-d H:i:s（可选）
+   *   end_date: "2024-07-29",          // 结束时间，格式：Y-m-d，当筛选更新时间时，支持Y-m-d或Y-m-d H:i:s（可选）
+   *   order_sns: "CR240729025,CR240729013",  // 收货单号，多个使用英文逗号分隔（可选）
+   *   status: 40,                      // 状态（可选）：10 待收货，40 已完成
+   *   wid: "1,2",                      // 仓库id，多个使用英文逗号分隔（可选）
+   *   order_type: 1,                   // 收货类型（可选）：1 采购订单，2 委外订单
+   *   qc_status: "0,1,2",              // 质检状态，多个使用英文逗号分隔（可选）：0 未质检，1 部分质检，2 完成质检
+   *   offset: 0,                       // 分页偏移量（可选，默认0）
+   *   length: 200                      // 分页长度（可选，默认200，上限500）
+   * }
+   * 支持查询收货单列表，对应系统【仓库】>【收货单】数据
+   */
+  fastify.post('/purchase-receipt-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingWarehouseService.getPurchaseReceiptOrderList(accountId, params);
+
+      return {
+        success: true,
+        message: '获取收货单列表成功',
+        data: result.data,
+        total: result.total
+      };
+    } catch (error) {
+      fastify.log.error('获取收货单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取收货单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 自动拉取所有收货单列表
+   * POST /api/lingxing/warehouse/fetch-all-purchase-receipt-orders/:accountId
+   * Body: {
+   *   // 筛选参数（可选）
+   *   date_type: 1,                    // 查询时间类型（可选）
+   *   start_date: "2024-07-29",        // 开始时间（可选）
+   *   end_date: "2024-07-29",          // 结束时间（可选）
+   *   order_sns: "CR240729025,CR240729013",  // 收货单号（可选）
+   *   status: 40,                      // 状态（可选）
+   *   wid: "1,2",                      // 仓库id（可选）
+   *   order_type: 1,                   // 收货类型（可选）
+   *   qc_status: "0,1,2",              // 质检状态（可选）
+   *   
+   *   // 选项（可选）
+   *   options: {
+   *     pageSize: 200,                  // 每页大小（可选，默认200，最大500）
+   *     delayBetweenPages: 500,         // 分页之间延迟（毫秒，可选，默认500）
+   *   }
+   * }
+   */
+  fastify.post('/fetch-all-purchase-receipt-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { options, ...filterParams } = body;
+
+    try {
+      const result = await lingxingWarehouseService.fetchAllPurchaseReceiptOrders(accountId, filterParams, options || {});
+
+      return {
+        success: true,
+        message: '自动拉取所有收货单列表成功',
+        data: result.orderList,
+        total: result.total,
+        stats: result.stats
+      };
+    } catch (error) {
+      fastify.log.error('自动拉取所有收货单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '自动拉取所有收货单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 查询质检单列表
+   * POST /api/lingxing/warehouse/receipt-order-qcs/:accountId
+   * Body: {
+   *   date_type: 3,                    // 查询时间类型（可选）：1 质检时间，2 收货时间，3 创建时间
+   *   start_date: "2024-07-30",        // 开始时间，格式：Y-m-d（可选）
+   *   end_date: "2024-07-30",          // 结束时间，格式：Y-m-d（可选）
+   *   qc_sns: "QC240730019",           // 质检单号，多个使用英文逗号分隔（可选）
+   *   status: "0",                     // 状态，多个使用英文逗号分隔（可选）：0 待质检，1 已质检，2 已免检，10 已质检（撤销），20 已免检（撤销）
+   *   wid: "1643",                     // 仓库id，多个用英文逗号分隔（可选）
+   *   offset: 0,                       // 分页偏移量（可选，默认0）
+   *   length: 200                      // 分页长度（可选，默认200，上限500）
+   * }
+   * 支持查询质检单列表，对应系统【仓库】>【质检单】数据
+   */
+  fastify.post('/receipt-order-qcs/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingWarehouseService.getReceiptOrderQcList(accountId, params);
+
+      return {
+        success: true,
+        message: '获取质检单列表成功',
+        data: result.data,
+        total: result.total
+      };
+    } catch (error) {
+      fastify.log.error('获取质检单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取质检单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 自动拉取所有质检单列表
+   * POST /api/lingxing/warehouse/fetch-all-receipt-order-qcs/:accountId
+   * Body: {
+   *   // 筛选参数（可选）
+   *   date_type: 3,                    // 查询时间类型（可选）
+   *   start_date: "2024-07-30",        // 开始时间（可选）
+   *   end_date: "2024-07-30",          // 结束时间（可选）
+   *   qc_sns: "QC240730019",           // 质检单号（可选）
+   *   status: "0",                     // 状态（可选）
+   *   wid: "1643",                     // 仓库id（可选）
+   *   
+   *   // 选项（可选）
+   *   options: {
+   *     pageSize: 200,                  // 每页大小（可选，默认200，最大500）
+   *     delayBetweenPages: 500,         // 分页之间延迟（毫秒，可选，默认500）
+   *     autoFetchDetails: true,          // 是否自动拉取并保存详情（可选，默认true）
+   *     delayBetweenDetails: 300         // 详情请求之间延迟（毫秒，可选，默认300）
+   *   }
+   * }
+   * 注意：当 autoFetchDetails 为 true 时，会自动为每个质检单拉取详情并保存到数据库
+   */
+  fastify.post('/fetch-all-receipt-order-qcs/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { options, ...filterParams } = body;
+
+    try {
+      const result = await lingxingWarehouseService.fetchAllReceiptOrderQcs(accountId, filterParams, options || {});
+
+      return {
+        success: true,
+        message: '自动拉取所有质检单列表成功',
+        data: result.qcList,
+        total: result.total,
+        stats: result.stats
+      };
+    } catch (error) {
+      fastify.log.error('自动拉取所有质检单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '自动拉取所有质检单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 查询质检单详情
+   * POST /api/lingxing/warehouse/receipt-order-qc-detail/:accountId
+   * Body: {
+   *   qc_sn: "QC220719001"              // 质检单号（必填）
+   * }
+   * 支持查询质检单详情信息
+   */
+  fastify.post('/receipt-order-qc-detail/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingWarehouseService.getReceiptOrderQcDetail(accountId, params);
+
+      return {
+        success: true,
+        message: '获取质检单详情成功',
+        data: result.data
+      };
+    } catch (error) {
+      fastify.log.error('获取质检单详情错误:', error);
+      
+      // 处理参数验证错误
+      if (error.message && error.message.includes('必填')) {
+        return reply.code(400).send({
+          success: false,
+          message: error.message || '参数错误'
+        });
+      }
+
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取质检单详情失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 查询入库单列表
+   * POST /api/lingxing/warehouse/inbound-orders/:accountId
+   * Body: {
+   *   offset: 0,                              // 分页偏移量（可选，默认0）
+   *   length: 20,                             // 分页长度（可选，默认20，上限200）
+   *   wid: 1,                                  // 系统仓库id（可选）
+   *   search_field_time: "create_time",        // 日期筛选类型（可选）：create_time 创建时间，opt_time 入库时间，increment_time 更新时间
+   *   start_date: "2024-07-30",                // 日期查询开始时间，格式：Y-m-d（可选）
+   *   end_date: "2024-07-30",                  // 日期查询结束时间，格式：Y-m-d（可选）
+   *   order_sn: "IB240730005",                 // 入库单单号，多个使用英文逗号分隔（可选）
+   *   inbound_idempotent_code: "IB240730005",  // 客户参考单号，多个使用英文逗号分隔（可选）
+   *   status: 40,                              // 入库单状态（可选）：10 待提交，20 待入库，40 已完成，50 已撤销，121 待审批，122 已驳回
+   *   type: 2                                  // 入库类型（可选）：-1 其他入库（含所有自定义类型），1 其他入库（非自定义类型），2 采购入库，3 调拨入库，4 赠品入库，26 退货入库，27 移除入库
+   * }
+   * 支持查询入库单列表，对应系统【仓库】>【入库单】数据
+   */
+  fastify.post('/inbound-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingWarehouseService.getInboundOrderList(accountId, params);
+
+      return {
+        success: true,
+        message: '获取入库单列表成功',
+        data: result.data,
+        total: result.total
+      };
+    } catch (error) {
+      fastify.log.error('获取入库单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取入库单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 自动拉取所有入库单列表
+   * POST /api/lingxing/warehouse/fetch-all-inbound-orders/:accountId
+   * Body: {
+   *   // 筛选参数（可选）
+   *   wid: 1,                                  // 系统仓库id（可选）
+   *   search_field_time: "create_time",        // 日期筛选类型（可选）
+   *   start_date: "2024-07-30",                // 日期查询开始时间（可选）
+   *   end_date: "2024-07-30",                  // 日期查询结束时间（可选）
+   *   order_sn: "IB240730005",                 // 入库单单号（可选）
+   *   inbound_idempotent_code: "IB240730005",  // 客户参考单号（可选）
+   *   status: 40,                              // 入库单状态（可选）
+   *   type: 2,                                  // 入库类型（可选）
+   *   
+   *   // 选项（可选）
+   *   options: {
+   *     pageSize: 200,                          // 每页大小（可选，默认200，最大200）
+   *     delayBetweenPages: 500,                  // 分页之间延迟（毫秒，可选，默认500）
+   *   }
+   * }
+   */
+  fastify.post('/fetch-all-inbound-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { options, ...filterParams } = body;
+
+    try {
+      const result = await lingxingWarehouseService.fetchAllInboundOrders(accountId, filterParams, options || {});
+
+      return {
+        success: true,
+        message: '自动拉取所有入库单列表成功',
+        data: result.inboundOrderList,
+        total: result.total,
+        stats: result.stats
+      };
+    } catch (error) {
+      fastify.log.error('自动拉取所有入库单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '自动拉取所有入库单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 查询出库单列表
+   * POST /api/lingxing/warehouse/outbound-orders/:accountId
+   * Body: {
+   *   offset: 0,                              // 分页偏移量（可选，默认0）
+   *   length: 20,                             // 分页长度（可选，默认20，上限200）
+   *   wid: "53",                               // 系统仓库id（可选）
+   *   search_field_time: "create_time",        // 日期筛选类型（可选）：create_time 创建时间，opt_time 出库时间，increment_time 更新时间
+   *   start_date: "2024-07-30",                // 日期查询开始时间，格式：Y-m-d（可选）
+   *   end_date: "2024-07-30",                  // 日期查询结束时间，格式：Y-m-d（可选）
+   *   order_sn: "OB240730003",                 // 出库单单号，多个使用英文逗号分隔（可选）
+   *   idempotent_code: "OB240730003",          // 客户参考号，多个使用英文逗号分隔（可选）
+   *   status: 40,                              // 出库单状态（可选）：10 待提交，30 待出库，40 已完成，50 已撤销，121 待审批，122 已驳回
+   *   type: 15                                 // 出库类型（可选）：11 其他出库，12 FBA出库，14 退货出库，15 调拨出库，16 WFS出库，17 Temu出库
+   * }
+   * 支持查询出库单列表，对应系统【仓库】>【出库单】数据
+   */
+  fastify.post('/outbound-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingWarehouseService.getOutboundOrderList(accountId, params);
+
+      return {
+        success: true,
+        message: '获取出库单列表成功',
+        data: result.data,
+        total: result.total
+      };
+    } catch (error) {
+      fastify.log.error('获取出库单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取出库单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 自动拉取所有出库单列表
+   * POST /api/lingxing/warehouse/fetch-all-outbound-orders/:accountId
+   * Body: {
+   *   // 筛选参数（可选）
+   *   wid: "53",                               // 系统仓库id（可选）
+   *   search_field_time: "create_time",        // 日期筛选类型（可选）
+   *   start_date: "2024-07-30",                // 日期查询开始时间（可选）
+   *   end_date: "2024-07-30",                  // 日期查询结束时间（可选）
+   *   order_sn: "OB240730003",                 // 出库单单号（可选）
+   *   idempotent_code: "OB240730003",          // 客户参考号（可选）
+   *   status: 40,                              // 出库单状态（可选）
+   *   type: 15,                                 // 出库类型（可选）
+   *   
+   *   // 选项（可选）
+   *   options: {
+   *     pageSize: 200,                          // 每页大小（可选，默认200，最大200）
+   *     delayBetweenPages: 500,                  // 分页之间延迟（毫秒，可选，默认500）
+   *   }
+   * }
+   */
+  fastify.post('/fetch-all-outbound-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { options, ...filterParams } = body;
+
+    try {
+      const result = await lingxingWarehouseService.fetchAllOutboundOrders(accountId, filterParams, options || {});
+
+      return {
+        success: true,
+        message: '自动拉取所有出库单列表成功',
+        data: result.outboundOrderList,
+        total: result.total,
+        stats: result.stats
+      };
+    } catch (error) {
+      fastify.log.error('自动拉取所有出库单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '自动拉取所有出库单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 查询海外仓备货单列表
+   * POST /api/lingxing/warehouse/overseas-stock-orders/:accountId
+   * Body: {
+   *   status: 60,                              // 状态（可选）：10 待审核，20 已驳回，30 待配货，40 待发货，50 待收货，51 已撤销，60 已完成
+   *   sub_status: 0,                           // 子状态（可选，仅在待收货状态下生效）：0 全部，1 未收货，2 部分收货
+   *   s_wid: [53],                             // 发货仓库id（可选，数组）
+   *   r_wid: [9],                              // 收货仓库id（可选，数组）
+   *   overseas_order_no: "OWS240730001",       // 备货单号（可选）
+   *   create_time_from: "2024-07-25",          // 查询开始日期，格式：Y-m-d（可选）
+   *   create_time_to: "2024-07-31",            // 查询结束日期，格式：Y-m-d（可选）
+   *   page_size: 20,                           // 分页数量，最大50，默认20（可选）
+   *   page: 1,                                 // 当前页码，默认1（可选）
+   *   date_type: "create_time",                // 备货单时间查询类型（可选）：delivery_time 发货时间，create_time 创建时间，receive_time 收货时间，update_time 更新时间
+   *   is_delete: 0                             // 订单是否删除（可选）：0 未删除，1 已删除，2 全部
+   * }
+   * 支持查询海外仓备货单列表，对应系统【仓库】>【海外仓备货单】数据
+   */
+  fastify.post('/overseas-stock-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingWarehouseService.getOverseasWarehouseStockOrderList(accountId, params);
+
+      return {
+        success: true,
+        message: '获取海外仓备货单列表成功',
+        data: result.data,
+        total: result.total
+      };
+    } catch (error) {
+      fastify.log.error('获取海外仓备货单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取海外仓备货单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 自动拉取所有海外仓备货单列表
+   * POST /api/lingxing/warehouse/fetch-all-overseas-stock-orders/:accountId
+   * Body: {
+   *   // 筛选参数（可选）
+   *   status: 60,                              // 状态（可选）
+   *   sub_status: 0,                           // 子状态（可选）
+   *   s_wid: [53],                             // 发货仓库id（可选）
+   *   r_wid: [9],                              // 收货仓库id（可选）
+   *   overseas_order_no: "OWS240730001",       // 备货单号（可选）
+   *   create_time_from: "2024-07-25",          // 查询开始日期（可选）
+   *   create_time_to: "2024-07-31",            // 查询结束日期（可选）
+   *   date_type: "create_time",                // 备货单时间查询类型（可选）
+   *   is_delete: 0,                            // 订单是否删除（可选）
+   *   
+   *   // 选项（可选）
+   *   options: {
+   *     pageSize: 50,                          // 每页大小（可选，默认50，最大50）
+   *     delayBetweenPages: 500,                 // 分页之间延迟（毫秒，可选，默认500）
+   *   }
+   * }
+   */
+  fastify.post('/fetch-all-overseas-stock-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { options, ...filterParams } = body;
+
+    try {
+      const result = await lingxingWarehouseService.fetchAllOverseasWarehouseStockOrders(accountId, filterParams, options || {});
+
+      return {
+        success: true,
+        message: '自动拉取所有海外仓备货单列表成功',
+        data: result.stockOrderList,
+        total: result.total,
+        stats: result.stats
+      };
+    } catch (error) {
+      fastify.log.error('自动拉取所有海外仓备货单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '自动拉取所有海外仓备货单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 查询备货单详情
+   * POST /api/lingxing/warehouse/overseas-stock-order-detail/:accountId
+   * Body: {
+   *   overseas_order_no: "OWS241231002"        // 备货单号（必填）
+   * }
+   * 支持查询备货单详情信息
+   */
+  fastify.post('/overseas-stock-order-detail/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingWarehouseService.getOverseasWarehouseStockOrderDetail(accountId, params);
+
+      return {
+        success: true,
+        message: '获取备货单详情成功',
+        data: result.data
+      };
+    } catch (error) {
+      fastify.log.error('获取备货单详情错误:', error);
+      
+      // 处理参数验证错误
+      if (error.message && error.message.includes('必填')) {
+        return reply.code(400).send({
+          success: false,
+          message: error.message || '参数错误'
+        });
+      }
+
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取备货单详情失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 查询销售出库单列表
+   * POST /api/lingxing/warehouse/wms-orders/:accountId
+   * Body: {
+   *   page: 1,                                 // 分页页码（可选，默认1）
+   *   page_size: 20,                          // 分页长度（可选，默认20，上限200）
+   *   sid_arr: [26],                          // 店铺id（可选，数组）
+   *   status_arr: [1, 2],                     // 状态（可选，数组）：1 物流下单，2 发货中，3 已发货，4 已删除
+   *   logistics_status_arr: [1, 2],           // 物流状态（可选，数组）
+   *   platform_order_no_arr: ["test123465021"],  // 平台单号（可选，数组）
+   *   order_number_arr: ["103130837064323072"],  // 系统单号（可选，数组）
+   *   wo_number_arr: ["WO103132593465409536"],   // 销售出库单号（可选，数组）
+   *   time_type: "create_at",                 // 时间类型（可选）：create_at 创建时间，delivered_at 出库时间，stock_delivered_at 流水出库时间，update_at 变更时间
+   *   start_date: "2021-11-23",               // 开始日期，格式：Y-m-d，默认为最近1个月（可选）
+   *   end_date: "2021-12-20"                  // 结束日期，格式：Y-m-d，默认为最近1个月（可选）
+   * }
+   * 支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单
+   * 默认返回一个月内审核出库的数据，超过一个月请加上时间入参
+   */
+  fastify.post('/wms-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const params = request.body || {};
+
+    try {
+      const result = await lingxingWarehouseService.getWmsOrderList(accountId, params);
+
+      return {
+        success: true,
+        message: '获取销售出库单列表成功',
+        data: result.data,
+        total: result.total
+      };
+    } catch (error) {
+      fastify.log.error('获取销售出库单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取销售出库单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
+   * 自动拉取所有销售出库单列表
+   * POST /api/lingxing/warehouse/fetch-all-wms-orders/:accountId
+   * Body: {
+   *   // 筛选参数（可选）
+   *   sid_arr: [26],                          // 店铺id（可选）
+   *   status_arr: [1, 2],                     // 状态（可选）
+   *   logistics_status_arr: [1, 2],           // 物流状态（可选）
+   *   platform_order_no_arr: ["test123465021"],  // 平台单号（可选）
+   *   order_number_arr: ["103130837064323072"],  // 系统单号（可选）
+   *   wo_number_arr: ["WO103132593465409536"],   // 销售出库单号（可选）
+   *   time_type: "create_at",                 // 时间类型（可选）
+   *   start_date: "2021-11-23",               // 开始日期（可选）
+   *   end_date: "2021-12-20",                 // 结束日期（可选）
+   *   
+   *   // 选项（可选）
+   *   options: {
+   *     pageSize: 200,                         // 每页大小（可选，默认200，最大200）
+   *     delayBetweenPages: 500,                // 分页之间延迟（毫秒，可选，默认500）
+   *   }
+   * }
+   */
+  fastify.post('/fetch-all-wms-orders/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const body = request.body || {};
+    const { options, ...filterParams } = body;
+
+    try {
+      const result = await lingxingWarehouseService.fetchAllWmsOrders(accountId, filterParams, options || {});
+
+      return {
+        success: true,
+        message: '自动拉取所有销售出库单列表成功',
+        data: result.wmsOrderList,
+        total: result.total,
+        stats: result.stats
+      };
+    } catch (error) {
+      fastify.log.error('自动拉取所有销售出库单列表错误:', error);
+      
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '自动拉取所有销售出库单列表失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
 }
 
 export default lingxingWarehouseRoutes;

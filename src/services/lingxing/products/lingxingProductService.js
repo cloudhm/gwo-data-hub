@@ -1,5 +1,8 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import lingXingSyncStateService from '../sync/lingXingSyncStateService.js';
+
+const LOG_PREFIX = '[IncrementalSync]';
 
 /**
  * 领星ERP产品服务
@@ -952,6 +955,11 @@ class LingXingProductService extends LingXingApiClient {
 
       console.log(`所有产品列表获取完成，共 ${allProducts.length} 个产品`);
 
+      // 保存产品列表到数据库
+      if (allProducts && allProducts.length > 0) {
+        await this.saveLocalProducts(accountId, allProducts);
+      }
+
       const stats = {
         totalProducts: allProducts.length,
         pagesFetched: currentPage,
@@ -1048,6 +1056,76 @@ class LingXingProductService extends LingXingApiClient {
     } catch (error) {
       console.error('自动拉取所有商品列表失败:', error.message);
       throw error;
+    }
+  }
+
+  /**
+   * 本地产品增量同步（按更新时间 update_time_start/update_time_end，单位：秒）
+   * 优先使用修改时间，只拉取该时间范围内有更新的产品
+   */
+  async incrementalSyncLocalProducts(accountId, options = {}) {
+    const {
+      endDate = null,
+      defaultLookbackDays = 7,
+      timezone = 'Asia/Shanghai',
+      pageSize = 1000,
+      delayBetweenPages = 500
+    } = options;
+
+    const taskType = 'localProduct';
+    const syncState = lingXingSyncStateService;
+    const dateRange = await syncState.getIncrementalDateRange(accountId, taskType, null, {
+      defaultLookbackDays,
+      endDate,
+      timezone
+    });
+
+    if (dateRange.isEmpty) {
+      console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 日期范围为空，跳过`);
+      return {
+        results: [{ success: true, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, skipped: true }],
+        summary: { successCount: 1, failCount: 0, totalRecords: 0 }
+      };
+    }
+
+    const startTs = Math.floor(new Date(dateRange.start_date + 'T00:00:00Z').getTime() / 1000);
+    const endTs = Math.floor(new Date(dateRange.end_date + 'T23:59:59Z').getTime() / 1000);
+
+    try {
+      console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 拉取更新时间 ${dateRange.start_date} ~ ${dateRange.end_date} (${startTs}~${endTs}s) ...`);
+      const result = await this.fetchAllLocalProducts(
+        accountId,
+        { update_time_start: startTs, update_time_end: endTs },
+        { pageSize, delayBetweenPages }
+      );
+      const recordCount = result?.total ?? result?.products?.length ?? 0;
+
+      await syncState.upsertSyncState(accountId, taskType, null, {
+        lastEndDate: dateRange.end_date,
+        lastSyncAt: new Date(),
+        lastRecordCount: recordCount,
+        lastStatus: 'success',
+        lastErrorMessage: null
+      });
+      console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+      return {
+        results: [{ success: true, recordCount, start_date: dateRange.start_date, end_date: dateRange.end_date }],
+        summary: { successCount: 1, failCount: 0, totalRecords: recordCount }
+      };
+    } catch (err) {
+      const message = err?.message || String(err);
+      await syncState.upsertSyncState(accountId, taskType, null, {
+        lastEndDate: null,
+        lastSyncAt: new Date(),
+        lastRecordCount: null,
+        lastStatus: 'failed',
+        lastErrorMessage: message
+      }).catch(() => {});
+      console.error(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 失败 ${dateRange.start_date}~${dateRange.end_date} error=${message}`);
+      return {
+        results: [{ success: false, recordCount: 0, start_date: dateRange.start_date, end_date: dateRange.end_date, error: message }],
+        summary: { successCount: 0, failCount: 1, totalRecords: 0 }
+      };
     }
   }
 }

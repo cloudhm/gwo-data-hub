@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP采购服务
@@ -1115,6 +1116,11 @@ class LingXingPurchaseService extends LingXingApiClient {
 
       console.log(`所有供应商列表获取完成，共 ${allSuppliers.length} 个供应商`);
 
+      // 保存到数据库
+      if (allSuppliers && allSuppliers.length > 0) {
+        await this.saveSuppliers(accountId, allSuppliers);
+      }
+
       return {
         suppliers: allSuppliers,
         total: allSuppliers.length,
@@ -1198,6 +1204,11 @@ class LingXingPurchaseService extends LingXingApiClient {
       }
 
       console.log(`所有采购方列表获取完成，共 ${allPurchasers.length} 个采购方`);
+
+      // 保存到数据库
+      if (allPurchasers && allPurchasers.length > 0) {
+        await this.savePurchasers(accountId, allPurchasers);
+      }
 
       return {
         purchasers: allPurchasers,
@@ -2056,6 +2067,70 @@ class LingXingPurchaseService extends LingXingApiClient {
       console.error('自动拉取所有收货单列表失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 采购单增量同步（优先按更新时间 search_field_time: update_time）
+   */
+  async incrementalSyncPurchaseOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'update_time' } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllPurchaseOrders(id, params, opts);
+        return { total: res?.total ?? res?.orders?.length ?? 0, data: res?.orders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 采购计划增量同步（按 start_date/end_date，优先 search_field_time: update_time）
+   */
+  async incrementalSyncPurchasePlans(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchasePlan',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'update_time' } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllPurchasePlans(id, params, opts);
+        return { total: res?.total ?? res?.plans?.length ?? 0, data: res?.plans };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 采购退货单增量同步（按 start_date/end_date，可选 search_field_time: create_time/last_time）
+   */
+  async incrementalSyncPurchaseReturnOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseReturnOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'last_time' } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllPurchaseReturnOrders(id, params, opts);
+        return { total: res?.total ?? res?.returnOrders?.length ?? 0, data: res?.returnOrders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 采购变更单增量同步（按 start_date/end_date，可选 search_field_time: create_time/update_time）
+   */
+  async incrementalSyncPurchaseChangeOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseChangeOrder',
+      { ...options, extraParams: { search_field_time: options.search_field_time || 'update_time' } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllPurchaseChangeOrders(id, params, opts);
+        return { total: res?.total ?? res?.changeOrders?.length ?? 0, data: res?.changeOrders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 }
 

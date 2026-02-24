@@ -229,6 +229,11 @@ class LingXingLogisticsService extends LingXingApiClient {
 
       console.log(`所有物流渠道列表获取完成，共 ${allChannels.length} 个物流渠道`);
 
+      // 保存到数据库
+      if (allChannels && allChannels.length > 0) {
+        await this.saveChannels(accountId, allChannels);
+      }
+
       return {
         channels: allChannels,
         total: allChannels.length,
@@ -479,6 +484,11 @@ class LingXingLogisticsService extends LingXingApiClient {
       }
 
       console.log(`所有物流商列表获取完成，共 ${allProviders.length} 个物流商`);
+
+      // 保存到数据库
+      if (allProviders && allProviders.length > 0) {
+        await this.saveHeadLogisticsProviders(accountId, allProviders);
+      }
 
       return {
         providers: allProviders,
@@ -757,6 +767,11 @@ class LingXingLogisticsService extends LingXingApiClient {
 
       console.log(`所有物流方式列表获取完成，共 ${allLogisticsTypes.length} 个物流方式`);
 
+      // 保存到数据库
+      if (allLogisticsTypes && allLogisticsTypes.length > 0) {
+        await this.saveUsedLogisticsTypes(accountId, allLogisticsTypes, filterParams.provider_type);
+      }
+
       return {
         logisticsTypes: allLogisticsTypes,
         total: allLogisticsTypes.length,
@@ -942,6 +957,11 @@ class LingXingLogisticsService extends LingXingApiClient {
       const total = result.total || 0;
 
       console.log(`所有运输方式列表获取完成，共 ${transportMethods.length} 个运输方式`);
+
+      // 保存到数据库
+      if (transportMethods && transportMethods.length > 0) {
+        await this.saveTransportMethods(accountId, transportMethods);
+      }
 
       return {
         transportMethods: transportMethods,

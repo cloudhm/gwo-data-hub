@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP销售服务
@@ -80,6 +81,83 @@ class LingXingSalesService extends LingXingApiClient {
       };
     } catch (error) {
       console.error('获取亚马逊订单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询亚马逊 Listing（【销售】>【Listing】）
+   * 唯一键：sid + seller_sku
+   * API: POST /erp/sc/data/mws/listing  令牌桶容量 1，需串行调用
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数
+   *   - sid: 店铺id，多个使用英文逗号分隔，对应亚马逊店铺列表的 sid（必填）
+   *   - is_pair: 是否配对：1 已配对，2 未配对（可选）
+   *   - is_delete: 是否删除：0 未删除，1 已删除（可选）
+   *   - pair_update_start_time: 配对更新时间开始，北京时间 Y-m-d H:i:s，需 is_pair=1（可选）
+   *   - pair_update_end_time: 配对更新时间结束，北京时间 Y-m-d H:i:s，需 is_pair=1（可选）
+   *   - listing_update_start_time: All Listing 报表更新时间开始，零时区 Y-m-d H:i:s（可选）
+   *   - listing_update_end_time: All Listing 报表更新时间结束，零时区 Y-m-d H:i:s（可选）
+   *   - search_field: 搜索字段 seller_sku / asin / sku（可选）
+   *   - search_value: 搜索值数组，上限10个（可选）
+   *   - exact_search: 0 模糊搜索，1 精确搜索，默认1（可选）
+   *   - store_type: 1 非低价商店，2 低价商店商品（可选）
+   *   - offset: 分页偏移量，默认0（可选）
+   *   - length: 分页长度，默认1000，上限1000（可选）
+   * @returns {Promise<Object>} { data: [], total: 0 }
+   */
+  async getListingList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      if (params.sid === undefined || params.sid === null || params.sid === '') {
+        throw new Error('sid 为必填参数，多个店铺使用英文逗号分隔');
+      }
+
+      const sidStr = Array.isArray(params.sid) ? params.sid.join(',') : String(params.sid).trim();
+      if (!sidStr) {
+        throw new Error('sid 为必填参数，多个店铺使用英文逗号分隔');
+      }
+
+      const requestParams = {
+        sid: sidStr,
+        ...(params.is_pair !== undefined && { is_pair: params.is_pair }),
+        ...(params.is_delete !== undefined && { is_delete: params.is_delete }),
+        ...(params.pair_update_start_time && { pair_update_start_time: params.pair_update_start_time }),
+        ...(params.pair_update_end_time && { pair_update_end_time: params.pair_update_end_time }),
+        ...(params.listing_update_start_time && { listing_update_start_time: params.listing_update_start_time }),
+        ...(params.listing_update_end_time && { listing_update_end_time: params.listing_update_end_time }),
+        ...(params.search_field && { search_field: params.search_field }),
+        ...(params.search_value && Array.isArray(params.search_value) && params.search_value.length > 0 && { search_value: params.search_value }),
+        ...(params.exact_search !== undefined && { exact_search: params.exact_search }),
+        ...(params.store_type !== undefined && { store_type: params.store_type }),
+        ...(params.offset !== undefined && { offset: params.offset }),
+        ...(params.length !== undefined && { length: Math.min(Number(params.length) || 1000, 1000) })
+      };
+
+      const response = await this.post(account, '/erp/sc/data/mws/listing', requestParams, {
+        successCode: [0, 200, '200']
+      });
+
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取 Listing 列表失败');
+      }
+
+      const data = response.data || [];
+      const total = response.total ?? data.length;
+
+      return {
+        data,
+        total
+      };
+    } catch (error) {
+      console.error('获取亚马逊 Listing 列表失败:', error.message);
       throw error;
     }
   }
@@ -565,6 +643,11 @@ class LingXingSalesService extends LingXingApiClient {
 
       console.log(`所有订单列表获取完成，共 ${allOrders.length} 个订单`);
 
+      // 保存订单列表到数据库
+      if (allOrders && allOrders.length > 0) {
+        await this.saveAmazonOrders(accountId, allOrders);
+      }
+
       const stats = {
         totalOrders: allOrders.length,
         pagesFetched: currentPage,
@@ -662,6 +745,23 @@ class LingXingSalesService extends LingXingApiClient {
       console.error('自动同步所有亚马逊订单失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 销售-亚马逊订单增量同步（按日期范围）
+   * date_type: 1 订购时间，2 订单修改时间，3 平台更新时间，10 发货时间（默认 2 优先使用修改时间）
+   */
+  async incrementalSyncAmazonOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'salesAmazonOrder',
+      { ...options, extraParams: { date_type: options.date_type ?? 2 } },
+      async (id, params, opts) => {
+        const res = await this.fetchAllAmazonOrders(id, params, opts);
+        return { total: res?.total ?? res?.orders?.length ?? 0, data: res?.orders };
+      }
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 }
 

@@ -15,6 +15,35 @@ class RateLimiter {
     // 每个桶的初始令牌数（可配置，默认10个）
     this.initialTokens = options.initialTokens || 10;
     
+    // 按接口URL配置的令牌桶容量映射
+    // key: 接口路径（支持部分匹配），value: 令牌桶容量
+    this.urlTokenConfig = options.urlTokenConfig || {
+      '/bd/fee/management/open/feeManagement/otherFee/type': 1,
+      '/bd/profit/report/open/report/msku/list': 10,
+      '/bd/profit/report/open/report/asin/list': 10,
+      '/bd/profit/report/open/report/parent/asin/list': 10,
+      '/bd/profit/report/open/report/sku/list': 10,
+      '/bd/profit/report/open/report/seller/list': 10,
+      '/bd/profit/report/open/report/seller/summary/list': 10,
+      '/cost/center/api/cost/stream': 10,
+      '/bd/profit/report/open/report/ads/invoice/list': 10,
+      '/bd/profit/report/open/report/ads/invoice/campaign/list': 10,
+      '/bd/profit/report/open/report/ads/invoice/detail': 10,
+      '/basicOpen/finance/requestFunds/order/list': 1,
+      '/basicOpen/finance/requestFundsPool/purchase/list': 1,
+      '/basicOpen/finance/requestFundsPool/inbound/list': 1,
+      '/basicOpen/finance/requestFundsPool/prepay/list': 1,
+      '/basicOpen/finance/requestFundsPool/logistics/list': 1,
+      '/basicOpen/finance/requestFundsPool/customFee/list': 1,
+      '/basicOpen/finance/requestFundsPool/otherFee/list': 1,
+      '/bd/sp/api/open/monthly/receivable/report/list': 1,
+      '/bd/sp/api/open/monthly/receivable/report/list/detail': 1,
+      '/bd/sp/api/open/monthly/receivable/report/list/detail/info': 1,
+      '/erp/sc/data/sales_report/asinDailyLists': 5,
+      '/bd/productPerformance/openApi/asinList': 1,
+      '/bd/profit/statistics/open/msku/list': 10
+    };
+    
     // 请求超时时间（2分钟）
     this.requestTimeout = options.requestTimeout || (2 * 60 * 1000);
     
@@ -32,14 +61,31 @@ class RateLimiter {
   }
 
   /**
+   * 获取接口对应的令牌桶容量
+   * @param {string} url - 接口URL
+   * @returns {number} 令牌桶容量
+   */
+  getTokenCapacity(url) {
+    // 检查是否有针对该接口的配置
+    for (const [pattern, capacity] of Object.entries(this.urlTokenConfig)) {
+      if (url.includes(pattern)) {
+        return capacity;
+      }
+    }
+    // 如果没有匹配的配置，使用默认值
+    return this.initialTokens;
+  }
+
+  /**
    * 获取或创建令牌桶
    */
   getBucket(appId, url) {
     const key = this.getBucketKey(appId, url);
     if (!this.buckets.has(key)) {
+      const tokenCapacity = this.getTokenCapacity(url);
       this.buckets.set(key, {
-        tokens: this.initialTokens, // 初始令牌数
-        maxTokens: this.initialTokens, // 最大令牌数（用于限制并发）
+        tokens: tokenCapacity, // 初始令牌数
+        maxTokens: tokenCapacity, // 最大令牌数（用于限制并发）
         requests: new Map() // 存储进行中的请求 { requestId: { timestamp, timeout } }
       });
     }
