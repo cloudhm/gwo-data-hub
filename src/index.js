@@ -33,6 +33,8 @@ import lingxingSyncRoutes from './routes/lingxing/lingxingSyncRoutes.js';
 console.log('[14.6] lingxingSyncRoutes 导入完成');
 import accountRoutes from './routes/accountRoutes.js';
 console.log('[15] accountRoutes 导入完成');
+import jobRoutes from './routes/jobRoutes.js';
+console.log('[15.1] jobRoutes 导入完成');
 
 // 加载环境变量
 console.log('[15] 加载环境变量...');
@@ -100,6 +102,8 @@ const start = async () => {
     console.log('[33.6] lingxingSyncRoutes 注册完成');
     await fastify.register(accountRoutes, { prefix: '/api/accounts' });
     console.log('[34] accountRoutes 注册完成');
+    await fastify.register(jobRoutes, { prefix: '/api/jobs' });
+    console.log('[34.1] jobRoutes 注册完成');
 
     // 404处理
     fastify.setNotFoundHandler(async (request, reply) => {
