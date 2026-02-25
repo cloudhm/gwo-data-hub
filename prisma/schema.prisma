@@ -46,6 +46,7 @@ model LingXingAccount {
   tokenExpiresAt DateTime? // token过期时间
   description   String?  // 账户描述
   isActive      Boolean  @default(true) // 是否启用
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -167,6 +168,8 @@ model LingXingAccount {
   mskuProfitStatistics LingXingMskuProfitStatistics[]
   // 关联的增量同步状态（一个账户下可有多个任务类型的同步状态）
   syncStates LingXingSyncState[]
+  // 关联的关键词排名数据（工具-关键词排名）
+  keywordRanks LingXingKeywordRank[]
 
   @@index([appId])
   @@index([isActive])
@@ -185,6 +188,7 @@ model LingXingOrder {
   buyerName       String?
   shippingAddress String?  @db.Text
   orderData       Json?    // 完整的订单JSON数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -205,6 +209,7 @@ model LingXingOrderItem {
   quantity    Int
   price       Decimal  @db.Decimal(10, 2)
   totalPrice  Decimal  @db.Decimal(10, 2)
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -227,6 +232,7 @@ model LingXingProduct {
   currency    String   @default("CNY")
   stock       Int      @default(0)
   productData Json?    // 完整的产品JSON数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -247,6 +253,7 @@ model LingXingInventory {
   reserved    Int      @default(0) // 预留库存
   available   Int      // 可用库存
   inventoryData Json?  // 完整的库存JSON数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -297,11 +304,12 @@ model LingXingSyncState {
   accountId        String    // 领星账户ID
   taskType         String    // 任务类型：allOrders, fbaOrders, salesReport, productPerformance, mskuProfitStatistics 等
   sid              Int?      // 店铺ID（可选，按店铺维度的任务使用；null 表示不按店铺）
-  lastEndDate      String?   // 上次同步的结束日期，格式 Y-m-d（下次增量从 lastEndDate 的次日开始）
+  lastEndTimestamp DateTime? // 上次同步的结束时间戳（精确到秒，下次增量从该时刻的次日 00:00:00 开始）
   lastSyncAt       DateTime? // 上次同步完成时间
   lastRecordCount  Int?      // 上次同步记录数
   lastStatus       String?   // 上次状态：success / failed
   lastErrorMessage String?   @db.Text // 上次错误信息
+  archived      Boolean  @default(false) // 软删除标记
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -314,6 +322,25 @@ model LingXingSyncState {
   @@map("ods_lingxing_sync_states")
 }
 
+// 领星ERP工具-关键词排名数据（getKeywordList 拉取结果）
+model LingXingKeywordRank {
+  id        String   @id @default(uuid())
+  accountId String   // 领星账户ID
+  mid       Int?     // 筛选：国家/站点id（与拉取时的 mid 一致）
+  startDate String?  // 筛选：开始日期 Y-m-d（与拉取时的 start_date 一致）
+  endDate   String?  // 筛选：结束日期 Y-m-d（与拉取时的 end_date 一致）
+  data      Json     // 单条关键词排名完整数据
+  archived  Boolean  @default(false) // 软删除标记
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account   LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([accountId, mid, startDate, endDate])
+  @@map("ods_lingxing_keyword_ranks")
+}
+
 // 亚马逊市场列表（基础数据）- 领星ERP基础数据
 model LingXingMarketplace {
   id            String   @id @default(uuid())
@@ -324,6 +351,7 @@ model LingXingMarketplace {
   country       String?  // 商城所在国家名称
   code          String?  // 亚马逊国家code
   data          Json?    // 完整的市场数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -340,6 +368,7 @@ model LingXingWorldState {
   stateOrProvinceName String   // 地区名称
   code                String   // 地区code
   data                Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   
@@ -366,6 +395,7 @@ model LingXingSeller {
   marketplaceId   String?  // 市场id
   status          Int?     // 店铺状态：0 停止同步，1 正常，2 授权异常，3 欠费停服
   data            Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -395,6 +425,7 @@ model LingXingConceptSeller {
   country           String?  // 店铺所在国家名称
   status            Int?     // 概念店铺状态：1 启用，2 禁用
   data              Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
@@ -424,6 +455,7 @@ model LingXingVcSeller {
   status        Int?     // 店铺授权服务状态：-1 删除，0 暂停同步，1 正常同步，2 授权异常
   mid           Int?     // 站点id
   data          Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -469,6 +501,7 @@ model LingXingVcListing {
   displayGroupRank     Json?    // 大类排名数组
   principalList        Json?    // 负责人列表数组
   data                 Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   
@@ -522,6 +555,7 @@ model LingXingVcOrder {
   gmtModified                String?  // 订单更新时间
   data                       Json?    // 完整的数据
   orderDetail                Json?    // VC订单详情（PO详情接口返回的完整数据）
+  archived      Boolean  @default(false) // 软删除标记
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
   
@@ -587,6 +621,7 @@ model LingXingVcOrderItem {
   rejectedQuantity          Int?     // 拒绝量
   receivedQuantity          Int?     // 签收量
   data                      Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   
@@ -629,6 +664,7 @@ model LingXingVcInvoice {
   gmtModified             String?  // 修改时间
   data                    Json?    // 完整的数据
   invoiceDetail           Json?    // VC发货单详情（详情接口返回的完整数据）
+  archived      Boolean  @default(false) // 软删除标记
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   
@@ -692,6 +728,7 @@ model LingXingVcInvoiceItem {
   gmtCreate                 String?  // 创建时间
   gmtModified               String?  // 修改时间
   data                      Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   
@@ -731,6 +768,7 @@ model LingXingVcInvoiceItemDimension {
   gmtCreate                     String?  // 创建时间
   gmtModified                   String?  // 修改时间
   data                          Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt
   
@@ -755,6 +793,7 @@ model LingXingVcInvoiceTracking {
   cartonLabelUrl                String?  @db.Text // 箱唛文件地址
   trackingNumber                String?  // 跟踪编号
   data                          Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt
   
@@ -785,6 +824,7 @@ model LingXingAccountUser {
   seller        String?  // 店铺权限
   isMaster      Int?     // 是否为主账号：0 否，1 是
   data          Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -833,6 +873,7 @@ model LingXingLocalProduct {
   attribute             Json?    // 产品属性
   data                  Json?    // 完整的数据
   productDetail         Json?    // 产品详细信息（来自 productInfo 接口）
+  archived      Boolean  @default(false) // 软删除标记
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -888,6 +929,7 @@ model LingXingAmazonOrder {
   gmtModifiedUtc          String?  // 订单修改时间【UTC】
   orderData               Json?    // 订单列表完整数据
   orderDetail             Json?    // 订单详情完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   
@@ -960,6 +1002,7 @@ model LingXingAmazonOrderItem {
   customizedJson          Json?    // 订单定制化信息json
   isSettled               Int?     // 商品已结算标识:0 未结算,1 已结算
   itemData                Json?    // 订单项完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   
@@ -1016,6 +1059,7 @@ model LingXingSupplier {
   receiptWid              Int?     // 采购收货仓库id
   receiptWidText          String?  // 采购收货仓库
   supplierData            Json?    // 供应商完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   
@@ -1040,6 +1084,7 @@ model LingXingPurchaser {
   contacter       String?  // 联系人
   email           String?  // 邮箱
   purchaserData   Json?    // 采购方完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -1094,6 +1139,7 @@ model LingXingPurchasePlan {
   isRelatedProcessPlan  Int?     // 是否关联了加工计划：0 否，1 是
   groupId               Int?     // 分组id
   planData              Json?    // 采购计划完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -1170,6 +1216,7 @@ model LingXingPurchaseOrder {
   paymentMethod          BigInt?  // 支付方式
   logisticsInfo          Json?    // 物流信息
   orderData              Json?    // 采购单完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   
@@ -1223,6 +1270,7 @@ model LingXingPurchaseOrderItem {
   spuName               String?  // 款名
   customFields          Json?    // 自定义字段
   itemData              Json?    // 采购单项完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -1266,6 +1314,7 @@ model LingXingPurchaseReturnOrder {
   returnAmountTotal     Decimal? @db.Decimal(10, 2) // 退货总金额
   remark                String?  @db.Text // 单据备注
   returnOrderData       Json?    // 采购退货单完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -1304,6 +1353,7 @@ model LingXingPurchaseReturnOrderItem {
   remark                String?  @db.Text // 备注
   sellerId              String?  // 店铺id
   itemData              Json?    // 采购退货单项完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -1338,6 +1388,7 @@ model LingXingPurchaseChangeOrder {
   amount                Decimal? @db.Decimal(10, 2) // 金额
   oldAmount             Decimal? @db.Decimal(10, 2) // 旧金额
   changeOrderData       Json?    // 采购变更单完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -1385,6 +1436,7 @@ model LingXingPurchaseChangeOrderItem {
   expectArriveTime      String?  // 预计到货时间
   oldExpectArriveTime   String?  // 原预计到货时间
   itemData              Json?    // 采购变更单项完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -1423,6 +1475,7 @@ model LingXingLogisticsChannel {
   isPointsBehind        Int?     // 是否分抛：0 否，1 是
   pointsBehindCoeffient Decimal? @db.Decimal(10, 2) // 分抛系数，不带%
   channelData           Json?    // 物流渠道完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -1457,6 +1510,7 @@ model LingXingHeadLogisticsProvider {
   creatorName           String?  // 创建人名
   createdAt             String?  // 创建时间，ISO格式
   providerData          Json?    // 物流商完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAtDb           DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
@@ -1498,6 +1552,7 @@ model LingXingUsedLogisticsType {
   wpCode                  String?  // 仓库代码
   wid                     BigInt?  // 仓库id
   logisticsTypeData       Json?    // 物流方式完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAtDb             DateTime @default(now())
   updatedAtDb             DateTime @updatedAt
   
@@ -1530,6 +1585,7 @@ model LingXingTransportMethod {
   createdAt           String?  // 创建时间，ISO格式
   updatedAt           String?  // 更新时间，ISO格式
   transportMethodData Json?    // 运输方式完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAtDb         DateTime @default(now())
   updatedAtDb         DateTime @updatedAt
   
@@ -1560,6 +1616,7 @@ model LingXingWarehouse {
   wpId                BigInt?  // 服务商ID，仅type=3且仓库为第三方海外仓时有值
   wpName              String?  // 系统服务商名称
   warehouseData       Json?    // 仓库完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   
@@ -1587,6 +1644,7 @@ model LingXingWarehouseBin {
   status          String?  // 仓位状态：1 禁用，2 启用
   type            String?  // 仓位类型：5 可用，6 次品
   binData         Json?    // 仓位完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -1615,6 +1673,7 @@ model LingXingWarehouseBinSku {
   sellerName      String?  // 卖家名称
   productName     String?  // 产品名称
   skuData         Json?    // SKU完整数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -1657,6 +1716,7 @@ model LingXingFbaWarehouseDetail {
   fbaStorageQuantityList  Json?    // FBA可售信息列表
   fbaInventoryData        Json?    // FBA库存完整数据
   data                    Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   
@@ -1688,6 +1748,7 @@ model LingXingInventoryDetail {
   purchasePrice Decimal? @db.Decimal(10, 4) // 采购价格
   stockPrice    Decimal? @db.Decimal(10, 4) // 库存价格/成本
   data          Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -1712,6 +1773,7 @@ model LingXingInventoryBinDetail {
   productId     BigInt?  // 产品ID
   quantity      Int?     // 库存数量
   data          Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -1775,6 +1837,7 @@ model LingXingWarehouseInventoryStatement {
   statementId             String?  // 流水ID
   badTransitBalanceNum    Int?     // 次品在途结存量
   data                    Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   
@@ -1814,6 +1877,7 @@ model LingXingWarehouseBinStatement {
   whbTypeName     String?  // 仓位类型名称
   wareHouseName   String?  // 仓库名称
   data            Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -1839,6 +1903,7 @@ model LingXingProductEntryRecommendBin {
   productId   BigInt   // 产品ID（唯一键的一部分，不能为空）
   whbId       BigInt   // 仓位ID（唯一键的一部分，不能为空）
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -1860,6 +1925,7 @@ model LingXingInboundOrder {
   orderSn     String   // 入库单单号
   wid         String?  // 仓库ID
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -1880,6 +1946,7 @@ model LingXingOutboundOrder {
   orderSn     String   // 出库单单号
   wid         String?  // 仓库ID
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -1899,6 +1966,7 @@ model LingXingOverseasWarehouseStockOrder {
   accountId           String   // 关联的领星账户ID
   overseasOrderNo    String   // 备货单号（唯一键的一部分）
   data                Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   
@@ -1917,6 +1985,7 @@ model LingXingWmsOrder {
   accountId       String   // 关联的领星账户ID
   woNumber        String   // 销售出库单号（唯一键的一部分）
   data            Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -1960,6 +2029,7 @@ model LingXingPurchaseReceiptOrder {
   expectArrivalTime   String?  // 预计到货时间
   itemList            Json?    // 收货单项列表
   data                Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   
@@ -2039,6 +2109,7 @@ model LingXingReceiptOrderQc {
   whbCodeBadList      Json?    // 次品仓位代码列表
   qcDetailData        Json?    // 质检单详情完整数据
   data                Json?    // 完整的数据（列表数据）
+  archived      Boolean  @default(false) // 软删除标记
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   
@@ -2067,6 +2138,7 @@ model LingXingFeeType {
   feeTypeId   String?  // 费用类型ID
   feeTypeName String?  // 费用类型名称
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2084,6 +2156,7 @@ model LingXingFeeDetail {
   accountId   String   // 关联的领星账户ID
   feeDetailId String?  // 费用明细ID（如果有唯一标识）
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2099,6 +2172,7 @@ model LingXingMskuProfitReport {
   accountId   String   // 关联的领星账户ID
   msku        String?  // MSKU
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2115,6 +2189,7 @@ model LingXingAsinProfitReport {
   accountId   String   // 关联的领星账户ID
   asin        String?  // ASIN
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2131,6 +2206,7 @@ model LingXingParentAsinProfitReport {
   accountId   String   // 关联的领星账户ID
   parentAsin  String?  // 父ASIN
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2147,6 +2223,7 @@ model LingXingSkuProfitReport {
   accountId   String   // 关联的领星账户ID
   sku         String?  // SKU
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2163,6 +2240,7 @@ model LingXingSellerProfitReport {
   accountId   String   // 关联的领星账户ID
   sid         Int?     // 店铺ID
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2178,6 +2256,7 @@ model LingXingFbaCostStream {
   id          String   @id @default(uuid())
   accountId   String   // 关联的领星账户ID
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2193,6 +2272,7 @@ model LingXingRequestFundsOrder {
   accountId   String   // 关联的领星账户ID
   orderSn     String?  // 请款单号
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2210,6 +2290,7 @@ model LingXingRequestFundsPoolPurchase {
   accountId   String   // 关联的领星账户ID
   orderSn     String?  // 采购单号
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2227,6 +2308,7 @@ model LingXingRequestFundsPoolInbound {
   accountId   String   // 关联的领星账户ID
   orderSn     String?  // 入库单号
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2244,6 +2326,7 @@ model LingXingAdsInvoice {
   accountId   String   // 关联的领星账户ID
   invoiceId   String?  // 发票ID（如果有唯一标识）
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2260,6 +2343,7 @@ model LingXingRequestFundsPoolPrepay {
   accountId   String   // 关联的领星账户ID
   orderSn     String?  // 预付款单号
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2277,6 +2361,7 @@ model LingXingRequestFundsPoolLogistics {
   accountId   String   // 关联的领星账户ID
   deliveryOrderSn String? // 发货单号
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2294,6 +2379,7 @@ model LingXingRequestFundsPoolCustomFee {
   accountId   String   // 关联的领星账户ID
   customFeeSn String?  // 其他应付单号
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2311,6 +2397,7 @@ model LingXingRequestFundsPoolOtherFee {
   accountId   String   // 关联的领星账户ID
   orderSn     String?  // 订单编号
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2328,6 +2415,7 @@ model LingXingReceivableReport {
   sid         Int?     // 店铺ID
   settleMonth String?  // 结算月
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2348,6 +2436,7 @@ model LingXingReceivableReportDetail {
   settleMonth String?  // 结算月
   fid         String?  // 结算编号
   data        Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -2369,6 +2458,7 @@ model LingXingAmazonReport {
   sid           Int?     // 店铺ID
   amazonOrderId String?  // 亚马逊订单ID（作为唯一键，用于更新）
   data          Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -2392,6 +2482,7 @@ model LingXingSalesReport {
   asinType      Int      // 查询维度：1=asin, 2=msku
   type          Int      // 类型：1=销售额, 2=销量, 3=订单量
   totalRecords  Int?     // 总记录数
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -2420,6 +2511,7 @@ model LingXingSalesReportItem {
   productName   String?  @db.Text // 品名
   mapValue      Decimal? @db.Decimal(15, 2) // 统计量（根据type不同，可能是销售额、销量或订单量）
   data          Json?    // 完整的数据
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -2446,6 +2538,7 @@ model LingXingProductPerformance {
   startDate         String   // 开始日期，格式：YYYY-MM-DD
   endDate           String   // 结束日期，格式：YYYY-MM-DD
   summaryField      String   // 汇总行维度：asin/parent_asin/msku/sku
+  archived      Boolean  @default(false) // 软删除标记
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
@@ -2472,6 +2565,7 @@ model LingXingProductPerformancePage {
   pageNumber        Int      // 页码（从0开始，pageOffset / pageLength）
   total             Int?     // 该页的总记录数
   data              Json     // 完整的分页数据（包含list数组和chain_start_date等）
+  archived      Boolean  @default(false) // 软删除标记
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
@@ -2499,6 +2593,7 @@ model LingXingMskuProfitStatistics {
   searchField   String?  // 搜索值类型：msku
   searchValue   Json?    // 搜索值数组
   totalRecords  Int?     // 总记录数
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -2524,6 +2619,7 @@ model LingXingMskuProfitStatisticsItem {
   sid           Int?     // 店铺ID
   dataDate      String?  // 日期，格式：YYYY-MM-DD
   data          Json?    // 完整的数据（包含所有字段）
+  archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   

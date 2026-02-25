@@ -1292,7 +1292,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async incrementalSyncAllOrdersReport(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7,
+      defaultLookbackDays = 7000,
       timezone = 'Asia/Shanghai',
       date_type = 1,
       pageSize = 1000,
@@ -1358,14 +1358,14 @@ class LingXingAmazonService extends LingXingApiClient {
         totalRecords += recordCount;
 
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: dateRange.end_date,
+          lastEndTimestamp: dateRange.end_timestamp,
           lastSyncAt: new Date(),
           lastRecordCount: recordCount,
           lastStatus: 'success',
           lastErrorMessage: null
         });
 
-        console.log(`${LOG_PREFIX} [allOrders] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        console.log(`${LOG_PREFIX} [allOrders] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndTimestamp=${dateRange.end_datetime}`);
         results.push({
           sid,
           success: true,
@@ -1377,7 +1377,7 @@ class LingXingAmazonService extends LingXingApiClient {
       } catch (err) {
         const message = err?.message || String(err);
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: null,
+          lastEndTimestamp: null,
           lastSyncAt: new Date(),
           lastRecordCount: null,
           lastStatus: 'failed',
@@ -1421,7 +1421,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async _incrementalSyncReportBySid(accountId, taskType, fetchAllFn, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7,
+      defaultLookbackDays = 7000,
       timezone = 'Asia/Shanghai',
       delayBetweenShops = 500,
       pageSize = 1000,
@@ -1485,14 +1485,14 @@ class LingXingAmazonService extends LingXingApiClient {
         totalRecords += recordCount;
 
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: dateRange.end_date,
+          lastEndTimestamp: dateRange.end_timestamp,
           lastSyncAt: new Date(),
           lastRecordCount: recordCount,
           lastStatus: 'success',
           lastErrorMessage: null
         });
 
-        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndTimestamp=${dateRange.end_datetime}`);
         results.push({
           sid,
           success: true,
@@ -1504,7 +1504,7 @@ class LingXingAmazonService extends LingXingApiClient {
       } catch (err) {
         const message = err?.message || String(err);
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: null,
+          lastEndTimestamp: null,
           lastSyncAt: new Date(),
           lastRecordCount: null,
           lastStatus: 'failed',
@@ -1619,7 +1619,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async incrementalSyncTransactionReport(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7,
+      defaultLookbackDays = 7000,
       timezone = 'Asia/Shanghai',
       delayBetweenShops = 500,
       pageSize = 1000,
@@ -1671,8 +1671,8 @@ class LingXingAmazonService extends LingXingApiClient {
       let recordCount = 0;
       try {
         console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 拉取 ${dateRange.start_date} ~ ${dateRange.end_date} (逐日) ...`);
-        const start = new Date(dateRange.start_date + 'T00:00:00Z');
-        const end = new Date(dateRange.end_date + 'T23:59:59Z');
+        const start = new Date(dateRange.start_timestamp);
+        const end = new Date(dateRange.end_timestamp);
         for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
           const event_date = d.toISOString().slice(0, 10);
           const pageResult = await this.getTransactionReport(accountId, { sid, event_date, offset: 0, length: pageSize });
@@ -1696,19 +1696,19 @@ class LingXingAmazonService extends LingXingApiClient {
 
         totalRecords += recordCount;
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: dateRange.end_date,
+          lastEndTimestamp: dateRange.end_timestamp,
           lastSyncAt: new Date(),
           lastRecordCount: recordCount,
           lastStatus: 'success',
           lastErrorMessage: null
         });
-        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndTimestamp=${dateRange.end_datetime}`);
         results.push({ sid, success: true, recordCount, start_date: dateRange.start_date, end_date: dateRange.end_date });
         successCount++;
       } catch (err) {
         const message = err?.message || String(err);
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: null,
+          lastEndTimestamp: null,
           lastSyncAt: new Date(),
           lastRecordCount: null,
           lastStatus: 'failed',
@@ -1735,7 +1735,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async incrementalSyncAmazonFulfilledShipmentsReport(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7,
+      defaultLookbackDays = 7000,
       timezone = 'Asia/Shanghai',
       delayBetweenShops = 500,
       pageSize = 1000,
@@ -1797,19 +1797,19 @@ class LingXingAmazonService extends LingXingApiClient {
         totalRecords += recordCount;
 
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: dateRange.end_date,
+          lastEndTimestamp: dateRange.end_timestamp,
           lastSyncAt: new Date(),
           lastRecordCount: recordCount,
           lastStatus: 'success',
           lastErrorMessage: null
         });
-        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndTimestamp=${dateRange.end_datetime}`);
         results.push({ sid, success: true, recordCount, start_date: dateRange.start_date, end_date: dateRange.end_date });
         successCount++;
       } catch (err) {
         const message = err?.message || String(err);
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: null,
+          lastEndTimestamp: null,
           lastSyncAt: new Date(),
           lastRecordCount: null,
           lastStatus: 'failed',
@@ -1833,7 +1833,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async incrementalSyncFbaInventoryEventDetailReport(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7,
+      defaultLookbackDays = 7000,
       timezone = 'Asia/Shanghai',
       delayBetweenShops = 500,
       pageSize = 1000,
@@ -1893,19 +1893,19 @@ class LingXingAmazonService extends LingXingApiClient {
         totalRecords += recordCount;
 
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: dateRange.end_date,
+          lastEndTimestamp: dateRange.end_timestamp,
           lastSyncAt: new Date(),
           lastRecordCount: recordCount,
           lastStatus: 'success',
           lastErrorMessage: null
         });
-        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 成功 拉取${recordCount}条 lastEndTimestamp=${dateRange.end_datetime}`);
         results.push({ sid, success: true, recordCount, start_date: dateRange.start_date, end_date: dateRange.end_date });
         successCount++;
       } catch (err) {
         const message = err?.message || String(err);
         await syncState.upsertSyncState(accountId, taskType, sid, {
-          lastEndDate: null,
+          lastEndTimestamp: null,
           lastSyncAt: new Date(),
           lastRecordCount: null,
           lastStatus: 'failed',
@@ -1925,7 +1925,7 @@ class LingXingAmazonService extends LingXingApiClient {
 
   /**
    * 盘存记录（Adjustment List）报表增量同步
-   * 接口使用 sids 参数，本方法按单店铺逐店同步并记录每店 lastEndDate
+   * 接口使用 sids 参数，本方法按单店铺逐店同步并记录每店 lastEndTimestamp
    */
   async incrementalSyncAdjustmentListReport(accountId, options = {}) {
     return this._incrementalSyncReportBySid(
@@ -2431,14 +2431,16 @@ class LingXingAmazonService extends LingXingApiClient {
             },
             update: {
               sid: itemSid,
-              data: reportItem
+              data: reportItem,
+              archived: false
             },
             create: {
               accountId: accountId,
               reportType: reportType,
               sid: itemSid,
               amazonOrderId: amazonOrderId,
-              data: reportItem
+              data: reportItem,
+              archived: false
             }
           });
 
@@ -2456,7 +2458,8 @@ class LingXingAmazonService extends LingXingApiClient {
               accountId: accountId,
               reportType: reportType,
               sid: itemSid,
-              data: reportItem
+              data: reportItem,
+              archived: false
             }
           });
           createdCount++;

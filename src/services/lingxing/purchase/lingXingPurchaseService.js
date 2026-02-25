@@ -119,6 +119,7 @@ class LingXingPurchaseService extends LingXingApiClient {
             receiptWid: supplier.receipt_wid !== undefined && supplier.receipt_wid !== null ? parseInt(supplier.receipt_wid) : null,
             receiptWidText: supplier.receipt_wid_text || null,
             supplierData: supplier, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -159,7 +160,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             purchaserIdText: supplier.purchaser_id_text || null,
             receiptWid: supplier.receipt_wid !== undefined && supplier.receipt_wid !== null ? parseInt(supplier.receipt_wid) : null,
             receiptWidText: supplier.receipt_wid_text || null,
-            supplierData: supplier // 保存完整数据
+            supplierData: supplier, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -258,6 +260,7 @@ class LingXingPurchaseService extends LingXingApiClient {
             contacter: purchaser.contacter || null,
             email: purchaser.email || null,
             purchaserData: purchaser, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -268,7 +271,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             contactPhone: purchaser.contact_phone || null,
             contacter: purchaser.contacter || null,
             email: purchaser.email || null,
-            purchaserData: purchaser // 保存完整数据
+            purchaserData: purchaser, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -417,6 +421,7 @@ class LingXingPurchaseService extends LingXingApiClient {
             isRelatedProcessPlan: plan.is_related_process_plan !== undefined && plan.is_related_process_plan !== null ? parseInt(plan.is_related_process_plan) : null,
             groupId: plan.group_id !== undefined && plan.group_id !== null ? parseInt(plan.group_id) : null,
             planData: plan, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -458,7 +463,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             isAux: plan.is_aux !== undefined && plan.is_aux !== null ? parseInt(plan.is_aux) : null,
             isRelatedProcessPlan: plan.is_related_process_plan !== undefined && plan.is_related_process_plan !== null ? parseInt(plan.is_related_process_plan) : null,
             groupId: plan.group_id !== undefined && plan.group_id !== null ? parseInt(plan.group_id) : null,
-            planData: plan // 保存完整数据
+            planData: plan, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -624,6 +630,7 @@ class LingXingPurchaseService extends LingXingApiClient {
             paymentMethod: order.payment_method !== undefined && order.payment_method !== null ? BigInt(order.payment_method) : null,
             logisticsInfo: order.logistics_info || null,
             orderData: order, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -684,7 +691,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             customFields: order.custom_fields || null,
             paymentMethod: order.payment_method !== undefined && order.payment_method !== null ? BigInt(order.payment_method) : null,
             logisticsInfo: order.logistics_info || null,
-            orderData: order // 保存完整数据
+            orderData: order, // 保存完整数据
+            archived: false
           }
         });
 
@@ -760,6 +768,7 @@ class LingXingPurchaseService extends LingXingApiClient {
             spuName: item.spu_name || null,
             customFields: item.custom_fields || null,
             itemData: item, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -796,7 +805,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             spu: item.spu || null,
             spuName: item.spu_name || null,
             customFields: item.custom_fields || null,
-            itemData: item // 保存完整数据
+            itemData: item, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -925,6 +935,7 @@ class LingXingPurchaseService extends LingXingApiClient {
             returnAmountTotal: returnOrder.return_amount_total !== undefined && returnOrder.return_amount_total !== null && returnOrder.return_amount_total !== '' ? parseFloat(returnOrder.return_amount_total) : null,
             remark: returnOrder.remark || null,
             returnOrderData: returnOrder, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -954,7 +965,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             returnReason: returnOrder.return_reason || null,
             returnAmountTotal: returnOrder.return_amount_total !== undefined && returnOrder.return_amount_total !== null && returnOrder.return_amount_total !== '' ? parseFloat(returnOrder.return_amount_total) : null,
             remark: returnOrder.remark || null,
-            returnOrderData: returnOrder // 保存完整数据
+            returnOrderData: returnOrder, // 保存完整数据
+            archived: false
           }
         });
 
@@ -1036,7 +1048,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             expectArriveTime: item.expect_arrive_time || null,
             remark: item.remark || null,
             sellerId: item.seller_id || null,
-            itemData: item // 保存完整数据
+            itemData: item, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -1622,6 +1635,7 @@ class LingXingPurchaseService extends LingXingApiClient {
             amount: changeOrder.amount !== undefined && changeOrder.amount !== null && changeOrder.amount !== '' ? parseFloat(changeOrder.amount) : null,
             oldAmount: changeOrder.old_amount !== undefined && changeOrder.old_amount !== null && changeOrder.old_amount !== '' ? parseFloat(changeOrder.old_amount) : null,
             changeOrderData: changeOrder, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -1643,7 +1657,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             icon: changeOrder.icon || null,
             amount: changeOrder.amount !== undefined && changeOrder.amount !== null && changeOrder.amount !== '' ? parseFloat(changeOrder.amount) : null,
             oldAmount: changeOrder.old_amount !== undefined && changeOrder.old_amount !== null && changeOrder.old_amount !== '' ? parseFloat(changeOrder.old_amount) : null,
-            changeOrderData: changeOrder // 保存完整数据
+            changeOrderData: changeOrder, // 保存完整数据
+            archived: false
           }
         });
 
@@ -1788,7 +1803,8 @@ class LingXingPurchaseService extends LingXingApiClient {
             isAux: item.is_aux !== undefined && item.is_aux !== null ? parseInt(item.is_aux) : null,
             expectArriveTime: item.expect_arrive_time || null,
             oldExpectArriveTime: item.old_expect_arrive_time || null,
-            itemData: item // 保存完整数据
+            itemData: item, // 保存完整数据
+            archived: false
           }
         });
       }

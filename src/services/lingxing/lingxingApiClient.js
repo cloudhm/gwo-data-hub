@@ -437,6 +437,35 @@ class LingXingApiClient {
       }
       requestId = null;
 
+      if (requestConfig) {
+        try {
+          const curlCommand = this.generateCurlCommand(
+            requestConfig.url,
+            requestConfig.method,
+            requestConfig.queryParams,
+            requestConfig.bodyData,
+            requestConfig.headers
+          );
+          console.error('\n=== 请求信息 (curl格式) ===');
+          console.error(curlCommand);
+          console.error('===========================\n');
+        } catch (curlError) {
+          console.error('生成curl命令失败:', curlError.message);
+        }
+      } else {
+        // 如果请求配置不存在（可能在获取token之前就失败了），尝试生成基本信息
+        try {
+          console.error('\n=== 请求信息 ===');
+          console.error(`方法: ${method}`);
+          console.error(`URL: ${fullUrl}`);
+          console.error(`路径: ${path}`);
+          console.error(`业务参数:`, JSON.stringify(params, null, 2));
+          console.error('===========================\n');
+        } catch (infoError) {
+          // 忽略
+        }
+      }
+
       return response.data;
     } catch (error) {
       // 处理需要重试的错误

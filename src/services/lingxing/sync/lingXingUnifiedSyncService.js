@@ -9,6 +9,7 @@ import lingxingProductService from '../products/lingxingProductService.js';
 import lingXingSalesService from '../sales/lingXingSalesService.js';
 import lingxingBasicDataService from '../basic/lingxingBasicDataService.js';
 import lingXingLogisticsService from '../logistics/lingXingLogisticsService.js';
+import lingXingToolsService from '../tools/lingXingToolsService.js';
 
 const LOG_PREFIX = '[LingXingUnifiedSync]';
 
@@ -113,15 +114,77 @@ const FULL_TASK_REGISTRY = {
   amazonOrdersFull: { service: lingXingSalesService, methodName: 'fetchAllAmazonOrders', description: '亚马逊订单(全量)', hasListParams: true },
 
   // 亚马逊报表（全量拉取）
-  allOrdersReportFull: { service: lingXingAmazonService, methodName: 'fetchAllOrdersReport', description: '所有订单报表(全量)', hasListParams: true }
+  allOrdersReportFull: { service: lingXingAmazonService, methodName: 'fetchAllOrdersReport', description: '所有订单报表(全量)', hasListParams: true },
+
+  // 工具
+  keywords: { service: lingXingToolsService, methodName: 'fetchAllKeywords', description: '关键词列表', hasListParams: true }
+};
+
+/**
+ * 全量同步前需软删除（归档）的领星表：taskType -> [{ model: Prisma 模型名(camelCase), accountField: 账户字段名，null 表示全表归档 }]
+ */
+const FULL_SYNC_ARCHIVE_MAP = {
+  sellerLists: [{ model: 'lingXingSeller', accountField: 'accountId' }],
+  conceptSellerLists: [{ model: 'lingXingConceptSeller', accountField: 'accountId' }],
+  accountUsers: [{ model: 'lingXingAccountUser', accountField: 'accountId' }],
+  marketplaces: [{ model: 'lingXingMarketplace', accountField: null }],
+  worldStates: [{ model: 'lingXingWorldState', accountField: null }],
+  channels: [{ model: 'lingXingLogisticsChannel', accountField: 'accountId' }],
+  headLogisticsProviders: [{ model: 'lingXingHeadLogisticsProvider', accountField: 'accountId' }],
+  transportMethods: [{ model: 'lingXingTransportMethod', accountField: 'accountId' }],
+  suppliers: [{ model: 'lingXingSupplier', accountField: 'accountId' }],
+  purchasers: [{ model: 'lingXingPurchaser', accountField: 'accountId' }],
+  vcSellers: [{ model: 'lingXingVcSeller', accountField: 'accountId' }],
+  vcListings: [{ model: 'lingXingVcListing', accountField: 'accountId' }],
+  vcOrdersFull: [{ model: 'lingXingVcOrder', accountField: 'accountId' }],
+  vcInvoicesFull: [{ model: 'lingXingVcInvoice', accountField: 'accountId' }],
+  warehouses: [{ model: 'lingXingWarehouse', accountField: 'accountId' }],
+  warehouseBins: [{ model: 'lingXingWarehouseBin', accountField: 'accountId' }],
+  fbaWarehouseDetails: [{ model: 'lingXingFbaWarehouseDetail', accountField: 'accountId' }],
+  inventoryDetails: [{ model: 'lingXingInventoryDetail', accountField: 'accountId' }],
+  inventoryBinDetails: [{ model: 'lingXingInventoryBinDetail', accountField: 'accountId' }],
+  wmsOrders: [{ model: 'lingXingWmsOrder', accountField: 'accountId' }],
+  overseasWarehouseStockOrders: [{ model: 'lingXingOverseasWarehouseStockOrder', accountField: 'accountId' }],
+  feeTypes: [{ model: 'lingXingFeeType', accountField: 'accountId' }],
+  feeDetailsFull: [{ model: 'lingXingFeeDetail', accountField: 'accountId' }],
+  requestFundsOrdersFull: [{ model: 'lingXingRequestFundsOrder', accountField: 'accountId' }],
+  mskuProfitReport: [{ model: 'lingXingMskuProfitReport', accountField: 'accountId' }],
+  sellerProfitReport: [{ model: 'lingXingSellerProfitReport', accountField: 'accountId' }],
+  localProductsFull: [{ model: 'lingXingLocalProduct', accountField: 'accountId' }],
+  amazonOrdersFull: [{ model: 'lingXingAmazonOrder', accountField: 'accountId' }],
+  allOrdersReportFull: [{ model: 'lingXingAmazonReport', accountField: 'accountId' }]
 };
 
 /**
  * 领星统一同步服务
  * - 不接收 accountId，从数据表遍历所有启用账户
  * - 仅对支持增量拉取的任务使用增量方法
+ * - 全量同步前将该任务对应的领星表下该账户（或全表）数据软删除（archived = true），upsert 时由各服务写入 archived = false
  */
 class LingXingUnifiedSyncService {
+  /**
+   * 全量同步前将对应表的数据归档（archived = true）
+   * @param {string} accountId - 账户ID
+   * @param {string} taskType - 任务类型
+   */
+  async archiveBeforeFullSync(accountId, taskType) {
+    const configs = FULL_SYNC_ARCHIVE_MAP[taskType];
+    if (!configs || !Array.isArray(configs)) return;
+    for (const { model, accountField } of configs) {
+      const client = prisma[model];
+      if (!client || typeof client.updateMany !== 'function') continue;
+      try {
+        const where = accountField ? { [accountField]: accountId } : {};
+        const result = await client.updateMany({ where, data: { archived: true } });
+        if (result.count > 0) {
+          console.log(`${LOG_PREFIX} [full] [${taskType}] 已归档 ${model} accountId=${accountId} 共 ${result.count} 条`);
+        }
+      } catch (err) {
+        console.warn(`${LOG_PREFIX} [full] [${taskType}] 归档 ${model} 失败:`, err?.message || err);
+      }
+    }
+  }
+
   /**
    * 从数据表获取所有启用账户
    * @returns {Promise<Array<{ id: string, name: string }>>}
@@ -331,6 +394,7 @@ class LingXingUnifiedSyncService {
       return { accountId, taskType, success: false, error: `服务方法不存在: ${methodName}` };
     }
     try {
+      await this.archiveBeforeFullSync(accountId, taskType);
       let args;
       if (hasListParams) {
         args = [accountId, options.listParams ?? options.searchParams ?? {}, options];
@@ -453,4 +517,4 @@ class LingXingUnifiedSyncService {
 }
 
 export default new LingXingUnifiedSyncService();
-export { INCREMENTAL_TASK_REGISTRY, FULL_TASK_REGISTRY };
+export { INCREMENTAL_TASK_REGISTRY, FULL_TASK_REGISTRY, FULL_SYNC_ARCHIVE_MAP };

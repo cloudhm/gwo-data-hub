@@ -14,7 +14,7 @@ class LingXingSyncStateService {
    * @param {number|null} sid - 店铺ID，按店铺维度的任务必传；不按店铺传 null
    */
   async getSyncState(accountId, taskType, sid = null) {
-    const sidVal = sid === undefined || sid === null ? null : parseInt(sid, 10);
+    const sidVal = sid === undefined || sid === null ? 0 : parseInt(sid, 10);
     return prisma.lingXingSyncState.findUnique({
       where: {
         accountId_taskType_sid: { accountId, taskType, sid: sidVal }
@@ -26,13 +26,13 @@ class LingXingSyncStateService {
    * 创建或更新同步状态（upsert）
    */
   async upsertSyncState(accountId, taskType, sid, data = {}) {
-    const sidVal = sid === undefined || sid === null ? null : parseInt(sid, 10);
+    const sidVal = sid === undefined || sid === null ? 0 : parseInt(sid, 10);
     return prisma.lingXingSyncState.upsert({
       where: {
         accountId_taskType_sid: { accountId, taskType, sid: sidVal }
       },
       update: {
-        ...(data.lastEndDate !== undefined && { lastEndDate: data.lastEndDate }),
+        ...(data.lastEndTimestamp !== undefined && { lastEndTimestamp: data.lastEndTimestamp }),
         ...(data.lastSyncAt !== undefined && { lastSyncAt: data.lastSyncAt }),
         ...(data.lastRecordCount !== undefined && { lastRecordCount: data.lastRecordCount }),
         ...(data.lastStatus !== undefined && { lastStatus: data.lastStatus }),
@@ -42,7 +42,7 @@ class LingXingSyncStateService {
         accountId,
         taskType,
         sid: sidVal,
-        lastEndDate: data.lastEndDate ?? null,
+        lastEndTimestamp: data.lastEndTimestamp ?? null,
         lastSyncAt: data.lastSyncAt ?? null,
         lastRecordCount: data.lastRecordCount ?? null,
         lastStatus: data.lastStatus ?? null,
@@ -53,58 +53,59 @@ class LingXingSyncStateService {
 
   /**
    * 计算本次增量同步的日期范围
-   * 若从未同步过，则从 defaultLookbackDays 天前到 endDate；否则从 lastEndDate 的次日到 endDate
+   * 若从未同步过：从 defaultLookbackDays 天前到 endDate；否则：从上次同步的 lastEndTimestamp 到当前时间点。
+   * 传入的 endDate 不做任何处理，原样使用。
    * @param {string} accountId - 领星账户ID
    * @param {string} taskType - 任务类型
    * @param {number|null} sid - 店铺ID
-   * @param {Object} options - defaultLookbackDays, endDate (Y-m-d), timezone
-   * @returns {Promise<{ start_date: string, end_date: string, isEmpty: boolean }>}
+   * @param {Object} options - defaultLookbackDays, endDate（原样使用，不处理）, timezone
+   * @returns {Promise<{ start_date: string, start_timestamp: Date, end_date: string, end_datetime: string, end_timestamp: Date, isEmpty: boolean }>}
    */
   async getIncrementalDateRange(accountId, taskType, sid, options = {}) {
     const {
-      defaultLookbackDays = 7,
+      defaultLookbackDays = 7000,
       endDate: optionEndDate = null,
       timezone = 'Asia/Shanghai'
     } = options;
 
     const state = await this.getSyncState(accountId, taskType, sid);
 
-    let end_date = optionEndDate;
-    if (!end_date) {
-      const now = new Date();
-      const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      });
-      const parts = formatter.formatToParts(now);
-      const y = parts.find(p => p.type === 'year').value;
-      const m = parts.find(p => p.type === 'month').value;
-      const d = parts.find(p => p.type === 'day').value;
-      const todayDate = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
-      todayDate.setDate(todayDate.getDate() - 1);
-      end_date = todayDate.toISOString().slice(0, 10);
-    }
+    const hasExplicitEndDate = optionEndDate != null && optionEndDate !== '';
 
     let start_date;
-    if (state?.lastEndDate) {
-      const last = new Date(state.lastEndDate + 'T12:00:00Z');
-      last.setUTCDate(last.getUTCDate() + 1);
+    let start_timestamp;
+    let end_date;
+    let end_datetime;
+    let end_timestamp;
+
+    if (state?.lastEndTimestamp) {
+      // 有历史状态：从 lastEndTimestamp 到当前时间点（不使用传入的 endDate）
+      const last = new Date(state.lastEndTimestamp);
       start_date = last.toISOString().slice(0, 10);
-      console.log(`${LOG_PREFIX} [getIncrementalDateRange] accountId=${accountId} taskType=${taskType} sid=${sid ?? 'null'} 有历史状态 lastEndDate=${state.lastEndDate} => 本次范围 ${start_date} ~ ${end_date}`);
+      start_timestamp = last;
+      end_timestamp = new Date();
+      end_datetime = end_timestamp.toLocaleString('sv-SE', { timeZone: timezone }).replace(' ', 'T');
+      end_date = end_timestamp.toLocaleString('sv-SE', { timeZone: timezone }).slice(0, 10);
+      console.log(`${LOG_PREFIX} [getIncrementalDateRange] accountId=${accountId} taskType=${taskType} sid=${sid ?? 'null'} 有历史状态 lastEndTimestamp=${state.lastEndTimestamp.toISOString()} => 本次范围 ${start_date} ~ ${end_date}`);
     } else {
-      const end = new Date(end_date + 'T12:00:00Z');
-      end.setUTCDate(end.getUTCDate() - defaultLookbackDays + 1);
-      start_date = end.toISOString().slice(0, 10);
+      // 从未同步过：从 defaultLookbackDays 天前到 endDate（未传 endDate 则到当前时间）
+      if (hasExplicitEndDate) {
+        end_date = optionEndDate;
+        end_datetime = optionEndDate;
+        end_timestamp = new Date(optionEndDate);
+      } else {
+        end_timestamp = new Date();
+        end_datetime = end_timestamp.toLocaleString('sv-SE', { timeZone: timezone }).replace(' ', 'T');
+        end_date = end_timestamp.toLocaleString('sv-SE', { timeZone: timezone }).slice(0, 10);
+      }
+      const endForStart = new Date(end_timestamp);
+      endForStart.setUTCDate(endForStart.getUTCDate() - defaultLookbackDays + 1);
+      start_date = endForStart.toISOString().slice(0, 10);
+      start_timestamp = endForStart;
       console.log(`${LOG_PREFIX} [getIncrementalDateRange] accountId=${accountId} taskType=${taskType} sid=${sid ?? 'null'} 无历史状态 使用回溯${defaultLookbackDays}天 => 本次范围 ${start_date} ~ ${end_date}`);
     }
 
-    if (start_date > end_date) {
-      console.log(`${LOG_PREFIX} [getIncrementalDateRange] accountId=${accountId} taskType=${taskType} sid=${sid ?? 'null'} 日期无交集 start_date>end_date 跳过`);
-      return { start_date: end_date, end_date, isEmpty: true };
-    }
-    return { start_date, end_date, isEmpty: false };
+    return { start_date, start_timestamp, end_date, end_datetime, end_timestamp, isEmpty: false };
   }
 }
 

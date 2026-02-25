@@ -122,6 +122,7 @@ class LingXingLogisticsService extends LingXingApiClient {
             isPointsBehind: channel.is_points_behind !== undefined && channel.is_points_behind !== null ? parseInt(channel.is_points_behind) : null,
             pointsBehindCoeffient: channel.points_behind_coeffient !== undefined && channel.points_behind_coeffient !== null ? parseFloat(channel.points_behind_coeffient) : null,
             channelData: channel, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -146,7 +147,8 @@ class LingXingLogisticsService extends LingXingApiClient {
             isIncludeTax: channel.is_include_tax !== undefined && channel.is_include_tax !== null ? parseInt(channel.is_include_tax) : null,
             isPointsBehind: channel.is_points_behind !== undefined && channel.is_points_behind !== null ? parseInt(channel.is_points_behind) : null,
             pointsBehindCoeffient: channel.points_behind_coeffient !== undefined && channel.points_behind_coeffient !== null ? parseFloat(channel.points_behind_coeffient) : null,
-            channelData: channel // 保存完整数据
+            channelData: channel, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -376,6 +378,7 @@ class LingXingLogisticsService extends LingXingApiClient {
             creatorName: provider.creatorName || null,
             createdAt: createdAtValue,
             providerData: provider, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -396,7 +399,8 @@ class LingXingLogisticsService extends LingXingApiClient {
             creatorId: creatorIdValue,
             creatorName: provider.creatorName || null,
             createdAt: createdAtValue,
-            providerData: provider // 保存完整数据
+            providerData: provider, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -659,6 +663,7 @@ class LingXingLogisticsService extends LingXingApiClient {
             wpCode: logisticsType.wp_code || null,
             wid: widValue,
             logisticsTypeData: logisticsType, // 保存完整数据
+            archived: false,
             updatedAtDb: new Date()
           },
           create: {
@@ -685,7 +690,8 @@ class LingXingLogisticsService extends LingXingApiClient {
             volumeParam: logisticsType.volume_param !== undefined && logisticsType.volume_param !== null ? parseInt(logisticsType.volume_param) : null,
             wpCode: logisticsType.wp_code || null,
             wid: widValue,
-            logisticsTypeData: logisticsType // 保存完整数据
+            logisticsTypeData: logisticsType, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -910,6 +916,7 @@ class LingXingLogisticsService extends LingXingApiClient {
             createdAt: createdAtValue,
             updatedAt: updatedAtValue,
             transportMethodData: method, // 保存完整数据
+            archived: false,
             updatedAtDb: new Date()
           },
           create: {
@@ -926,7 +933,8 @@ class LingXingLogisticsService extends LingXingApiClient {
             updaterName: method.updater_name || null,
             createdAt: createdAtValue,
             updatedAt: updatedAtValue,
-            transportMethodData: method // 保存完整数据
+            transportMethodData: method, // 保存完整数据
+            archived: false
           }
         });
       }

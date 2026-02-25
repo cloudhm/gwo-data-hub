@@ -20,7 +20,7 @@ const LOG_PREFIX = '[IncrementalSync]';
 async function runAccountLevelIncrementalSync(accountId, taskType, options, fetchFn) {
   const {
     endDate = null,
-    defaultLookbackDays = 7,
+    defaultLookbackDays = 7000,
     timezone = 'Asia/Shanghai',
     extraParams = {}
   } = options;
@@ -54,14 +54,14 @@ async function runAccountLevelIncrementalSync(accountId, taskType, options, fetc
     const recordCount = result?.total ?? result?.data?.length ?? result?.orders?.length ?? result?.orderList?.length ?? result?.inboundOrderList?.length ?? result?.outboundOrderList?.length ?? result?.feeDetails?.length ?? result?.plans?.length ?? result?.returnOrders?.length ?? result?.changeOrders?.length ?? 0;
 
     await syncState.upsertSyncState(accountId, taskType, null, {
-      lastEndDate: dateRange.end_date,
+      lastEndTimestamp: dateRange.end_timestamp,
       lastSyncAt: new Date(),
       lastRecordCount: recordCount,
       lastStatus: 'success',
       lastErrorMessage: null
     });
 
-    console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+    console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 成功 拉取${recordCount}条 lastEndTimestamp=${dateRange.end_datetime}`);
     return {
       success: true,
       recordCount,
@@ -71,7 +71,7 @@ async function runAccountLevelIncrementalSync(accountId, taskType, options, fetc
   } catch (err) {
     const message = err?.message || String(err);
     await syncState.upsertSyncState(accountId, taskType, null, {
-      lastEndDate: null,
+      lastEndTimestamp: null,
       lastSyncAt: new Date(),
       lastRecordCount: null,
       lastStatus: 'failed',

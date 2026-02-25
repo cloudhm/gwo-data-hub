@@ -156,6 +156,9 @@ class LingXingToolsService extends LingXingApiClient {
 
       console.log(`所有关键词列表获取完成，共 ${allKeywordList.length} 条记录`);
 
+      // 保存到数据库（同一次拉取视为全量：先归档当前筛选条件下的旧数据，再写入新数据）
+      await this.saveKeywordRanks(accountId, allKeywordList, filterParams);
+
       return {
         keywordList: allKeywordList,
         total: allKeywordList.length,
@@ -166,6 +169,60 @@ class LingXingToolsService extends LingXingApiClient {
       };
     } catch (error) {
       console.error('自动拉取所有关键词列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 将关键词列表保存到数据库
+   * 按 accountId + 筛选条件（mid, start_date, end_date）视为一批：先归档该批旧数据，再批量写入新数据（archived: false）
+   * @param {string} accountId - 领星账户ID
+   * @param {Array<Object>} keywordList - 关键词列表（API 返回的 data 数组）
+   * @param {Object} filterParams - 本次拉取使用的筛选参数 { mid?, start_date?, end_date? }
+   */
+  async saveKeywordRanks(accountId, keywordList, filterParams = {}) {
+    if (!prisma.lingXingKeywordRank) {
+      console.error('Prisma Client 中未找到 lingXingKeywordRank 模型');
+      return;
+    }
+
+    const mid = filterParams.mid !== undefined && filterParams.mid !== null ? filterParams.mid : null;
+    const startDate = filterParams.start_date !== undefined && filterParams.start_date !== null ? String(filterParams.start_date) : null;
+    const endDate = filterParams.end_date !== undefined && filterParams.end_date !== null ? String(filterParams.end_date) : null;
+
+    try {
+      // 归档与本次筛选条件一致的历史数据（同一 accountId + mid + startDate + endDate）
+      const where = {
+        accountId,
+        mid,
+        startDate,
+        endDate
+      };
+      await prisma.lingXingKeywordRank.updateMany({
+        where,
+        data: { archived: true, updatedAt: new Date() }
+      });
+
+      if (!keywordList || keywordList.length === 0) {
+        console.log('关键词列表为空，仅完成归档，未写入新记录');
+        return;
+      }
+
+      // 批量写入新数据（archived: false）
+      await prisma.lingXingKeywordRank.createMany({
+        data: keywordList.map(item => ({
+          accountId,
+          mid,
+          startDate,
+          endDate,
+          data: item,
+          archived: false
+        }))
+      });
+
+      console.log(`关键词排名已保存到数据库: 共 ${keywordList.length} 条记录（accountId=${accountId}, mid=${mid ?? 'all'}, start_date=${startDate ?? 'all'}, end_date=${endDate ?? 'all'}）`);
+    } catch (error) {
+      console.error('保存关键词排名到数据库失败:', error.message);
       throw error;
     }
   }

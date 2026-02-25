@@ -147,6 +147,7 @@ class LingXingProductService extends LingXingApiClient {
             customFields: product.custom_fields,
             attribute: product.attribute,
             data: product,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -180,7 +181,8 @@ class LingXingProductService extends LingXingApiClient {
             supplierQuote: product.supplier_quote,
             customFields: product.custom_fields,
             attribute: product.attribute,
-            data: product
+            data: product,
+            archived: false
           }
         });
       }
@@ -1066,7 +1068,7 @@ class LingXingProductService extends LingXingApiClient {
   async incrementalSyncLocalProducts(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7,
+      defaultLookbackDays = 7000,
       timezone = 'Asia/Shanghai',
       pageSize = 1000,
       delayBetweenPages = 500
@@ -1088,8 +1090,8 @@ class LingXingProductService extends LingXingApiClient {
       };
     }
 
-    const startTs = Math.floor(new Date(dateRange.start_date + 'T00:00:00Z').getTime() / 1000);
-    const endTs = Math.floor(new Date(dateRange.end_date + 'T23:59:59Z').getTime() / 1000);
+    const startTs = Math.floor(dateRange.start_timestamp.getTime() / 1000);
+    const endTs = Math.floor(dateRange.end_timestamp.getTime() / 1000);
 
     try {
       console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 拉取更新时间 ${dateRange.start_date} ~ ${dateRange.end_date} (${startTs}~${endTs}s) ...`);
@@ -1101,13 +1103,13 @@ class LingXingProductService extends LingXingApiClient {
       const recordCount = result?.total ?? result?.products?.length ?? 0;
 
       await syncState.upsertSyncState(accountId, taskType, null, {
-        lastEndDate: dateRange.end_date,
+        lastEndTimestamp: dateRange.end_timestamp,
         lastSyncAt: new Date(),
         lastRecordCount: recordCount,
         lastStatus: 'success',
         lastErrorMessage: null
       });
-      console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 成功 拉取${recordCount}条 lastEndDate=${dateRange.end_date}`);
+      console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} 成功 拉取${recordCount}条 lastEndTimestamp=${dateRange.end_datetime}`);
       return {
         results: [{ success: true, recordCount, start_date: dateRange.start_date, end_date: dateRange.end_date }],
         summary: { successCount: 1, failCount: 0, totalRecords: recordCount }
@@ -1115,7 +1117,7 @@ class LingXingProductService extends LingXingApiClient {
     } catch (err) {
       const message = err?.message || String(err);
       await syncState.upsertSyncState(accountId, taskType, null, {
-        lastEndDate: null,
+        lastEndTimestamp: null,
         lastSyncAt: new Date(),
         lastRecordCount: null,
         lastStatus: 'failed',

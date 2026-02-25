@@ -3690,13 +3690,15 @@ class LingXingFinanceService extends LingXingApiClient {
           update: {
             feeTypeName: feeType.name || feeType.fee_type_name || null,
             data: feeType,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             feeTypeId: feeTypeIdStr,
             feeTypeName: feeType.name || feeType.fee_type_name || null,
-            data: feeType
+            data: feeType,
+            archived: false
           }
         });
       }
@@ -3722,7 +3724,8 @@ class LingXingFinanceService extends LingXingApiClient {
           data: {
             accountId: accountId,
             feeDetailId: feeDetail.id || feeDetail.business_sn || null,
-            data: feeDetail
+            data: feeDetail,
+            archived: false
           }
         });
       }
@@ -3748,7 +3751,8 @@ class LingXingFinanceService extends LingXingApiClient {
           data: {
             accountId: accountId,
             msku: report.msku || report.seller_sku || null,
-            data: report
+            data: report,
+            archived: false
           }
         });
       }
@@ -3774,7 +3778,8 @@ class LingXingFinanceService extends LingXingApiClient {
           data: {
             accountId: accountId,
             asin: report.asin || null,
-            data: report
+            data: report,
+            archived: false
           }
         });
       }
@@ -3800,7 +3805,8 @@ class LingXingFinanceService extends LingXingApiClient {
           data: {
             accountId: accountId,
             parentAsin: report.parent_asin || null,
-            data: report
+            data: report,
+            archived: false
           }
         });
       }
@@ -3826,7 +3832,8 @@ class LingXingFinanceService extends LingXingApiClient {
           data: {
             accountId: accountId,
             sku: report.sku || report.local_sku || null,
-            data: report
+            data: report,
+            archived: false
           }
         });
       }
@@ -3852,7 +3859,8 @@ class LingXingFinanceService extends LingXingApiClient {
           data: {
             accountId: accountId,
             sid: report.sid ? parseInt(report.sid) : null,
-            data: report
+            data: report,
+            archived: false
           }
         });
       }
@@ -3877,7 +3885,8 @@ class LingXingFinanceService extends LingXingApiClient {
         await prisma.lingXingFbaCostStream.create({
           data: {
             accountId: accountId,
-            data: stream
+            data: stream,
+            archived: false
           }
         });
       }
@@ -3903,7 +3912,8 @@ class LingXingFinanceService extends LingXingApiClient {
           data: {
             accountId: accountId,
             invoiceId: invoice.invoice_id || invoice.id || null,
-            data: invoice
+            data: invoice,
+            archived: false
           }
         });
       }
@@ -3936,12 +3946,14 @@ class LingXingFinanceService extends LingXingApiClient {
           },
           update: {
             data: order,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             orderSn: order.order_sn,
-            data: order
+            data: order,
+            archived: false
           }
         });
       }
@@ -3974,12 +3986,14 @@ class LingXingFinanceService extends LingXingApiClient {
           },
           update: {
             data: purchase,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             orderSn: purchase.order_sn,
-            data: purchase
+            data: purchase,
+            archived: false
           }
         });
       }
@@ -4012,12 +4026,14 @@ class LingXingFinanceService extends LingXingApiClient {
           },
           update: {
             data: inbound,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             orderSn: inbound.order_sn,
-            data: inbound
+            data: inbound,
+            archived: false
           }
         });
       }
@@ -4050,12 +4066,14 @@ class LingXingFinanceService extends LingXingApiClient {
           },
           update: {
             data: prepay,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             orderSn: prepay.order_sn,
-            data: prepay
+            data: prepay,
+            archived: false
           }
         });
       }
@@ -4088,12 +4106,14 @@ class LingXingFinanceService extends LingXingApiClient {
           },
           update: {
             data: logistic,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             deliveryOrderSn: logistic.delivery_order_sn,
-            data: logistic
+            data: logistic,
+            archived: false
           }
         });
       }
@@ -4126,12 +4146,14 @@ class LingXingFinanceService extends LingXingApiClient {
           },
           update: {
             data: customFee,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             customFeeSn: customFee.custom_fee_sn,
-            data: customFee
+            data: customFee,
+            archived: false
           }
         });
       }
@@ -4157,7 +4179,8 @@ class LingXingFinanceService extends LingXingApiClient {
           data: {
             accountId: accountId,
             orderSn: otherFee.orderSn || otherFee.order_sn || null,
-            data: otherFee
+            data: otherFee,
+            archived: false
           }
         });
       }
@@ -4191,13 +4214,15 @@ class LingXingFinanceService extends LingXingApiClient {
           },
           update: {
             data: report,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             sid: parseInt(report.sid),
             settleMonth: report.settlementDate || report.settleMonth,
-            data: report
+            data: report,
+            archived: false
           }
         });
       }
@@ -4227,7 +4252,8 @@ class LingXingFinanceService extends LingXingApiClient {
             sid: detail.sid ? parseInt(detail.sid) : null,
             settleMonth: detail.settleMonth || null,
             fid: detail.fid,
-            data: detail
+            data: detail,
+            archived: false
           }
         });
       }

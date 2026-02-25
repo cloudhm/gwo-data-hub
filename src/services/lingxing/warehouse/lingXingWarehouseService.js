@@ -145,6 +145,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             wpId: wpIdValue,
             wpName: warehouse.wp_name || null,
             warehouseData: warehouse, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -160,7 +161,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             countryCode: warehouse.country_code || null,
             wpId: wpIdValue,
             wpName: warehouse.wp_name || null,
-            warehouseData: warehouse // 保存完整数据
+            warehouseData: warehouse, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -403,6 +405,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             status: statusValue,
             type: typeValue,
             binData: bin, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -414,7 +417,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             whbStatus: whbStatusValue,
             status: statusValue,
             type: typeValue,
-            binData: bin // 保存完整数据
+            binData: bin, // 保存完整数据
+            archived: false
           }
         });
 
@@ -478,6 +482,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             sellerName: skuFnsku.seller_name || null,
             productName: skuFnsku.product_name || null,
             skuData: skuFnsku, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -489,7 +494,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             storeId: storeIdValue,
             sellerName: skuFnsku.seller_name || null,
             productName: skuFnsku.product_name || null,
-            skuData: skuFnsku // 保存完整数据
+            skuData: skuFnsku, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -977,6 +983,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             fbaStorageQuantityList: fbaInventory.fba_storage_quantity_list !== undefined && fbaInventory.fba_storage_quantity_list !== null ? fbaInventory.fba_storage_quantity_list : (fbaInventory.fbaStorageQuantityList !== undefined && fbaInventory.fbaStorageQuantityList !== null ? fbaInventory.fbaStorageQuantityList : null),
             fbaInventoryData: fbaInventory.fba_inventory_data !== undefined && fbaInventory.fba_inventory_data !== null ? fbaInventory.fba_inventory_data : (fbaInventory.fbaInventoryData !== undefined && fbaInventory.fbaInventoryData !== null ? fbaInventory.fbaInventoryData : null),
             data: fbaInventory, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -1003,7 +1010,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             cgPrice: cgPrice,
             fbaStorageQuantityList: fbaInventory.fba_storage_quantity_list !== undefined && fbaInventory.fba_storage_quantity_list !== null ? fbaInventory.fba_storage_quantity_list : (fbaInventory.fbaStorageQuantityList !== undefined && fbaInventory.fbaStorageQuantityList !== null ? fbaInventory.fbaStorageQuantityList : null),
             fbaInventoryData: fbaInventory.fba_inventory_data !== undefined && fbaInventory.fba_inventory_data !== null ? fbaInventory.fba_inventory_data : (fbaInventory.fbaInventoryData !== undefined && fbaInventory.fbaInventoryData !== null ? fbaInventory.fbaInventoryData : null),
-            data: fbaInventory // 保存完整数据
+            data: fbaInventory, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -1751,6 +1759,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             statementId: statementId,
             badTransitBalanceNum: badTransitBalanceNum,
             data: statement,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -1798,7 +1807,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             goodTransitBalanceNum: goodTransitBalanceNum,
             statementId: statementId,
             badTransitBalanceNum: badTransitBalanceNum,
-            data: statement
+            data: statement,
+            archived: false
           }
         });
       }
@@ -1894,6 +1904,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             whbTypeName: whbTypeName,
             wareHouseName: wareHouseName,
             data: statement,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -1916,7 +1927,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             productName: productName,
             whbTypeName: whbTypeName,
             wareHouseName: wareHouseName,
-            data: statement
+            data: statement,
+            archived: false
           }
         });
       }
@@ -1975,6 +1987,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             productId: productIdValue,
             whbId: whbIdValue,
             data: bin,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -1982,7 +1995,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             wid: widStr,
             productId: productIdValue,
             whbId: whbIdValue,
-            data: bin
+            data: bin,
+            archived: false
           }
         });
       }
@@ -2024,13 +2038,15 @@ class LingXingWarehouseService extends LingXingApiClient {
           update: {
             wid: widStr,
             data: order,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             orderSn: order.order_sn,
             wid: widStr,
-            data: order
+            data: order,
+            archived: false
           }
         });
       }
@@ -2072,13 +2088,15 @@ class LingXingWarehouseService extends LingXingApiClient {
           update: {
             wid: widStr,
             data: order,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             orderSn: order.order_sn,
             wid: widStr,
-            data: order
+            data: order,
+            archived: false
           }
         });
       }
@@ -2440,6 +2458,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             expectArrivalTime: expectArrivalTime,
             itemList: itemList,
             data: order,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -2470,7 +2489,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             logisticsOrderNo: logisticsOrderNo,
             expectArrivalTime: expectArrivalTime,
             itemList: itemList,
-            data: order
+            data: order,
+            archived: false
           }
         });
       }
@@ -2779,6 +2799,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             supplierName: qc.supplier_name || null,
             source: sourceValue,
             data: qc, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -2824,7 +2845,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             supplierId: supplierIdValue,
             supplierName: qc.supplier_name || null,
             source: sourceValue,
-            data: qc // 保存完整数据
+            data: qc, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -2879,6 +2901,7 @@ class LingXingWarehouseService extends LingXingApiClient {
           whbCodeGoodList: qcDetail.whb_code_good_list || null,
           whbCodeBadList: qcDetail.whb_code_bad_list || null,
           qcDetailData: qcDetail, // 保存完整数据
+          archived: false,
           updatedAt: new Date()
         }
       });
@@ -3579,12 +3602,14 @@ class LingXingWarehouseService extends LingXingApiClient {
           },
           update: {
             data: order,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             overseasOrderNo: overseasOrderNo,
-            data: order
+            data: order,
+            archived: false
           }
         });
       }
@@ -3868,12 +3893,14 @@ class LingXingWarehouseService extends LingXingApiClient {
           },
           update: {
             data: order,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             accountId: accountId,
             woNumber: woNumber,
-            data: order
+            data: order,
+            archived: false
           }
         });
       }
@@ -4046,6 +4073,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             purchasePrice: purchasePrice,
             stockPrice: stockPrice,
             data: detail,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -4056,7 +4084,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             quantity: quantity,
             purchasePrice: purchasePrice,
             stockPrice: stockPrice,
-            data: detail
+            data: detail,
+            archived: false
           }
         });
       }
@@ -4125,6 +4154,7 @@ class LingXingWarehouseService extends LingXingApiClient {
             productId: productIdValue,
             quantity: quantity,
             data: detail,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -4133,7 +4163,8 @@ class LingXingWarehouseService extends LingXingApiClient {
             binId: binIdStr,
             productId: productIdValue,
             quantity: quantity,
-            data: detail
+            data: detail,
+            archived: false
           }
         });
       }

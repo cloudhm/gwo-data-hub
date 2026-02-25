@@ -373,6 +373,7 @@ class LingXingReportService extends LingXingApiClient {
         },
         update: {
           totalRecords: reportData.length,
+          archived: false,
           updatedAt: new Date()
         },
         create: {
@@ -381,7 +382,8 @@ class LingXingReportService extends LingXingApiClient {
           eventDate: event_date,
           asinType: asin_type || 1,
           type: type || 1,
-          totalRecords: reportData.length
+          totalRecords: reportData.length,
+          archived: false
         }
       });
 
@@ -423,6 +425,7 @@ class LingXingReportService extends LingXingApiClient {
               ? parseFloat(item.map_value) 
               : null,
             data: item, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -436,7 +439,8 @@ class LingXingReportService extends LingXingApiClient {
             mapValue: item.map_value !== undefined && item.map_value !== null && item.map_value !== '' 
               ? parseFloat(item.map_value) 
               : null,
-            data: item // 保存完整数据
+            data: item, // 保存完整数据
+            archived: false
           }
         });
       }
@@ -907,6 +911,7 @@ class LingXingReportService extends LingXingApiClient {
             }
           },
           update: {
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -914,7 +919,8 @@ class LingXingReportService extends LingXingApiClient {
             sidString: sidString,
             startDate: start_date,
             endDate: end_date,
-            summaryField: summary_field
+            summaryField: summary_field,
+            archived: false
           }
         });
       } catch (error) {
@@ -964,6 +970,7 @@ class LingXingReportService extends LingXingApiClient {
           pageLength: length,
           total: pageData.total !== undefined ? pageData.total : null,
           data: pageData, // 保存完整的分页数据（包含list数组和所有元数据）
+          archived: false,
           updatedAt: new Date()
         },
         create: {
@@ -972,7 +979,8 @@ class LingXingReportService extends LingXingApiClient {
           pageLength: length,
           pageNumber: pageNumber,
           total: pageData.total !== undefined ? pageData.total : null,
-          data: pageData // 保存完整的分页数据
+          data: pageData, // 保存完整的分页数据
+          archived: false
         }
       });
 
@@ -1128,6 +1136,7 @@ class LingXingReportService extends LingXingApiClient {
             searchField: searchField || null,
             searchValue: searchValue || null,
             totalRecords: responseData.total !== undefined ? responseData.total : null,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -1140,7 +1149,8 @@ class LingXingReportService extends LingXingApiClient {
             sids: sidArray.length > 0 ? sidArray : null,
             searchField: searchField || null,
             searchValue: searchValue || null,
-            totalRecords: responseData.total !== undefined ? responseData.total : null
+            totalRecords: responseData.total !== undefined ? responseData.total : null,
+            archived: false
           }
         });
       } catch (error) {
@@ -1209,6 +1219,7 @@ class LingXingReportService extends LingXingApiClient {
             update: {
               asin: record.asin || null,
               data: record, // 保存完整的记录数据
+              archived: false,
               updatedAt: new Date()
             },
             create: {
@@ -1217,7 +1228,8 @@ class LingXingReportService extends LingXingApiClient {
               asin: record.asin || null,
               sid: sid,
               dataDate: dataDate,
-              data: record // 保存完整的记录数据
+              data: record, // 保存完整的记录数据
+              archived: false
             }
           });
           savedCount++;
@@ -1235,6 +1247,7 @@ class LingXingReportService extends LingXingApiClient {
                 data: {
                   asin: record.asin || null,
                   data: record,
+                  archived: false,
                   updatedAt: new Date()
                 }
               });

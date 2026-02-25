@@ -277,6 +277,7 @@ class LingXingSalesService extends LingXingApiClient {
             gmtModified: order.gmt_modified || null,
             gmtModifiedUtc: order.gmt_modified_utc || null,
             orderData: order, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -313,7 +314,8 @@ class LingXingSalesService extends LingXingApiClient {
             earliestShipDateUtc: order.earliest_ship_date_utc || null,
             gmtModified: order.gmt_modified || null,
             gmtModifiedUtc: order.gmt_modified_utc || null,
-            orderData: order // 保存完整数据
+            orderData: order, // 保存完整数据
+            archived: false
           }
         });
 
@@ -417,6 +419,7 @@ class LingXingSalesService extends LingXingApiClient {
             customizedJson: item.customized_json ? (typeof item.customized_json === 'string' ? JSON.parse(item.customized_json) : item.customized_json) : null,
             isSettled: item.is_settled !== undefined ? parseInt(item.is_settled) : null,
             itemData: item, // 保存完整数据
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -472,7 +475,8 @@ class LingXingSalesService extends LingXingApiClient {
             itemDiscount: item.item_discount !== undefined && item.item_discount !== null && item.item_discount !== '' ? parseFloat(item.item_discount) : null,
             customizedJson: item.customized_json ? (typeof item.customized_json === 'string' ? JSON.parse(item.customized_json) : item.customized_json) : null,
             isSettled: item.is_settled !== undefined ? parseInt(item.is_settled) : null,
-            itemData: item // 保存完整数据
+            itemData: item, // 保存完整数据
+            archived: false
           }
         });
       }

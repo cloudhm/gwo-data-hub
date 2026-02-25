@@ -97,6 +97,7 @@ class LingXingVcService extends LingXingApiClient {
             status: vcSeller.status,
             mid: vcSeller.mid,
             data: vcSeller,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -110,7 +111,8 @@ class LingXingVcService extends LingXingApiClient {
             name: vcSeller.name,
             status: vcSeller.status,
             mid: vcSeller.mid,
-            data: vcSeller
+            data: vcSeller,
+            archived: false
           }
         });
       }
@@ -360,6 +362,7 @@ class LingXingVcService extends LingXingApiClient {
             displayGroupRank: listing.display_group_rank || null,
             principalList: listing.principal_list || null,
             data: listing,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -388,7 +391,8 @@ class LingXingVcService extends LingXingApiClient {
             classificationRank: listing.classification_rank || null,
             displayGroupRank: listing.display_group_rank || null,
             principalList: listing.principal_list || null,
-            data: listing
+            data: listing,
+            archived: false
           }
         });
       }
@@ -738,6 +742,7 @@ class LingXingVcService extends LingXingApiClient {
             gmtCreate: order.gmt_create,
             gmtModified: order.gmt_modified,
             data: order,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -771,7 +776,8 @@ class LingXingVcService extends LingXingApiClient {
             printNum: order.print_num,
             gmtCreate: order.gmt_create,
             gmtModified: order.gmt_modified,
-            data: order
+            data: order,
+            archived: false
           }
         });
 
@@ -786,6 +792,7 @@ class LingXingVcService extends LingXingApiClient {
           for (const item of order.purchase_order_sku_list) {
             await prisma.lingXingVcOrderItem.create({
               data: {
+                archived: false,
                 orderId: savedOrder.id,
                 itemId: item.id,
                 vcStoreId: item.vc_store_id,
@@ -1320,6 +1327,7 @@ class LingXingVcService extends LingXingApiClient {
             gmtCreate: invoice.gmtCreate,
             gmtModified: invoice.gmtModified,
             data: invoice,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -1345,7 +1353,8 @@ class LingXingVcService extends LingXingApiClient {
             outboundDate: invoice.outboundDate,
             gmtCreate: invoice.gmtCreate,
             gmtModified: invoice.gmtModified,
-            data: invoice
+            data: invoice,
+            archived: false
           }
         });
 
@@ -1360,6 +1369,7 @@ class LingXingVcService extends LingXingApiClient {
           for (const item of invoice.items) {
             const savedItem = await prisma.lingXingVcInvoiceItem.create({
               data: {
+                archived: false,
                 invoiceId: savedInvoice.id,
                 itemId: item.id,
                 sku: item.sku,
@@ -1407,6 +1417,7 @@ class LingXingVcService extends LingXingApiClient {
               for (const dimension of item.itemDimensionsList) {
                 await prisma.lingXingVcInvoiceItemDimension.create({
                   data: {
+                    archived: false,
                     invoiceItemId: savedItem.id,
                     dimensionId: dimension.id,
                     purchaseOrderSkuId: dimension.purchaseOrderSkuId,
@@ -1445,6 +1456,7 @@ class LingXingVcService extends LingXingApiClient {
           for (const tracking of invoice.invoiceTrackingList) {
             await prisma.lingXingVcInvoiceTracking.create({
               data: {
+                archived: false,
                 invoiceId: savedInvoice.id,
                 orderSn: tracking.orderSn,
                 sourceOrderSn: tracking.sourceOrderSn,

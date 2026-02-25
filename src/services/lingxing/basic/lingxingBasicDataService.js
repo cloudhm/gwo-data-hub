@@ -89,6 +89,7 @@ class LingXingBasicDataService extends LingXingApiClient {
             country: marketplace.country,
             code: marketplace.code,
             data: marketplace,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -98,7 +99,8 @@ class LingXingBasicDataService extends LingXingApiClient {
             awsRegion: marketplace.aws_region,
             country: marketplace.country,
             code: marketplace.code,
-            data: marketplace
+            data: marketplace,
+            archived: false
           }
         });
       }
@@ -277,13 +279,15 @@ class LingXingBasicDataService extends LingXingApiClient {
           },
           update: {
             data: state,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
             countryCode: state.country_code,
             stateOrProvinceName: state.state_or_province_name,
             code: state.code,
-            data: state
+            data: state,
+            archived: false
           }
         });
       }
@@ -433,6 +437,7 @@ class LingXingBasicDataService extends LingXingApiClient {
             marketplaceId: seller.marketplace_id,
             status: seller.status,
             data: seller,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -448,7 +453,8 @@ class LingXingBasicDataService extends LingXingApiClient {
             hasAdsSetting: seller.has_ads_setting,
             marketplaceId: seller.marketplace_id,
             status: seller.status,
-            data: seller
+            data: seller,
+            archived: false
           }
         });
       }
@@ -644,6 +650,7 @@ class LingXingBasicDataService extends LingXingApiClient {
             country: conceptSeller.country,
             status: conceptSeller.status,
             data: conceptSeller,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -657,7 +664,8 @@ class LingXingBasicDataService extends LingXingApiClient {
             region: conceptSeller.region,
             country: conceptSeller.country,
             status: conceptSeller.status,
-            data: conceptSeller
+            data: conceptSeller,
+            archived: false
           }
         });
       }
@@ -847,6 +855,7 @@ class LingXingBasicDataService extends LingXingApiClient {
             country: conceptSeller.country,
             status: conceptSeller.status,
             data: conceptSeller,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -860,7 +869,8 @@ class LingXingBasicDataService extends LingXingApiClient {
             region: conceptSeller.region,
             country: conceptSeller.country,
             status: conceptSeller.status,
-            data: conceptSeller
+            data: conceptSeller,
+            archived: false
           }
         });
       }
@@ -1178,6 +1188,7 @@ class LingXingBasicDataService extends LingXingApiClient {
             seller: user.seller,
             isMaster: user.is_master,
             data: user,
+            archived: false,
             updatedAt: new Date()
           },
           create: {
@@ -1195,7 +1206,8 @@ class LingXingBasicDataService extends LingXingApiClient {
             role: user.role,
             seller: user.seller,
             isMaster: user.is_master,
-            data: user
+            data: user,
+            archived: false
           }
         });
       }
