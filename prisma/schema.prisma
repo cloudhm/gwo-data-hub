@@ -74,6 +74,8 @@ model LingXingAccount {
   localProducts LingXingLocalProduct[]
   // 关联的亚马逊订单（通过领星ERP获取）
   amazonOrders LingXingAmazonOrder[]
+  // 关联的亚马逊 Listing（销售-Listing，sid + seller_sku 唯一）
+  amazonListings LingXingAmazonListing[]
   // 关联的供应商（一个账户下可以有多个供应商）
   suppliers LingXingSupplier[]
   // 关联的采购方（一个账户下可以有多个采购方）
@@ -1015,6 +1017,26 @@ model LingXingAmazonOrderItem {
   @@index([sellerSku])
   @@index([localSku])
   @@map("ods_lingxing_amazon_order_items")
+}
+
+// 领星ERP亚马逊 Listing（销售-Listing，唯一键：accountId + sid + seller_sku）
+model LingXingAmazonListing {
+  id           String   @id @default(uuid())
+  accountId    String   // 关联的领星账户ID
+  sid          Int      // 店铺id（领星店铺唯一标识）
+  sellerSku    String   // 卖家 SKU（MSKU）
+  listingData  Json?    // 接口返回的完整 Listing 数据
+  archived     Boolean  @default(false) // 软删除标记
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  account      LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, sid, sellerSku], name: "accountId_sid_sellerSku")
+  @@index([accountId])
+  @@index([sid])
+  @@index([sellerSku])
+  @@map("ods_lingxing_amazon_listings")
 }
 
 // 领星ERP供应商（采购管理数据）

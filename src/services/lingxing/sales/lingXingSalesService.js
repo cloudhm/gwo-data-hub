@@ -125,6 +125,7 @@ class LingXingSalesService extends LingXingApiClient {
         throw new Error('sid 为必填参数，多个店铺使用英文逗号分隔');
       }
 
+      const pageLength = params.length !== undefined ? Math.min(Number(params.length) || 1000, 1000) : 1000;
       const requestParams = {
         sid: sidStr,
         ...(params.is_pair !== undefined && { is_pair: params.is_pair }),
@@ -137,8 +138,8 @@ class LingXingSalesService extends LingXingApiClient {
         ...(params.search_value && Array.isArray(params.search_value) && params.search_value.length > 0 && { search_value: params.search_value }),
         ...(params.exact_search !== undefined && { exact_search: params.exact_search }),
         ...(params.store_type !== undefined && { store_type: params.store_type }),
-        ...(params.offset !== undefined && { offset: params.offset }),
-        ...(params.length !== undefined && { length: Math.min(Number(params.length) || 1000, 1000) })
+        offset: params.offset !== undefined ? params.offset : 0,
+        length: pageLength
       };
 
       const response = await this.post(account, '/erp/sc/data/mws/listing', requestParams, {
@@ -152,12 +153,122 @@ class LingXingSalesService extends LingXingApiClient {
       const data = response.data || [];
       const total = response.total ?? data.length;
 
+      if (data.length > 0) {
+        await this.saveListings(accountId, data);
+      }
+
       return {
         data,
         total
       };
     } catch (error) {
       console.error('获取亚马逊 Listing 列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 保存亚马逊 Listing 列表到数据库（唯一键：accountId + sid + seller_sku）
+   * @param {string} accountId - 领星账户ID
+   * @param {Array} listings - Listing 列表数据（每项需含 sid、seller_sku）
+   */
+  async saveListings(accountId, listings) {
+    try {
+      if (!prisma.lingXingAmazonListing) {
+        console.error('Prisma Client 中未找到 lingXingAmazonListing 模型');
+        return;
+      }
+      for (const row of listings) {
+        const sid = row.sid !== undefined && row.sid !== null ? parseInt(row.sid) : null;
+        const sellerSku = row.seller_sku != null ? String(row.seller_sku).trim() : '';
+        if (sid === null || sellerSku === '') continue;
+        await prisma.lingXingAmazonListing.upsert({
+          where: {
+            accountId_sid_sellerSku: {
+              accountId,
+              sid,
+              sellerSku
+            }
+          },
+          update: {
+            listingData: row,
+            archived: false,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId,
+            sid,
+            sellerSku,
+            listingData: row,
+            archived: false
+          }
+        });
+      }
+      console.log(`Listing 列表已保存到数据库: 共 ${listings.length} 条`);
+    } catch (error) {
+      console.error('保存 Listing 列表到数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 全量拉取所有亚马逊 Listing（从数据库遍历该账户下所有 sid，按 sid 分页拉取并保存）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} options - 选项：pageSize(默认1000)、delayBetweenPages(默认500)、onProgress(currentPage,totalPages,currentCount,totalCount)
+   */
+  async fetchAllListings(accountId, options = {}) {
+    const { pageSize = 1000, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 1000);
+
+    try {
+      const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+      if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+
+      const sellers = await prisma.lingXingSeller.findMany({
+        where: { accountId }
+      });
+      const sids = sellers.map(s => s.sid).filter(s => s != null);
+      if (sids.length === 0) {
+        console.log('该账户下无店铺(sid)，跳过 Listing 全量拉取');
+        return { listingList: [], total: 0, stats: { totalListings: 0, sidsProcessed: 0, pagesFetched: 0 } };
+      }
+
+      console.log(`开始全量拉取 Listing，共 ${sids.length} 个店铺: ${sids.join(', ')}`);
+      const allListings = [];
+      let totalPages = 0;
+      let pagesFetched = 0;
+
+      for (const sid of sids) {
+        let offset = 0;
+        let totalForSid = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const pageResult = await this.getListingList(accountId, {
+            sid,
+            offset,
+            length: actualPageSize
+          });
+          const pageList = pageResult.data || [];
+          const total = pageResult.total ?? pageList.length;
+          if (offset === 0) totalForSid = total;
+          allListings.push(...pageList);
+          pagesFetched++;
+          if (onProgress) onProgress(pagesFetched, totalForSid ? Math.ceil(totalForSid / actualPageSize) : 1, allListings.length, totalForSid);
+          if (pageList.length < actualPageSize || (totalForSid > 0 && offset + pageList.length >= totalForSid)) hasMore = false;
+          else {
+            offset += actualPageSize;
+            if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+          }
+        }
+      }
+
+      console.log(`Listing 全量拉取完成，共 ${allListings.length} 条`);
+      return {
+        listingList: allListings,
+        total: allListings.length,
+        stats: { totalListings: allListings.length, sidsProcessed: sids.length, pagesFetched }
+      };
+    } catch (error) {
+      console.error('全量拉取 Listing 失败:', error.message);
       throw error;
     }
   }

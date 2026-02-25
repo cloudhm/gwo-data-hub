@@ -112,6 +112,7 @@ const FULL_TASK_REGISTRY = {
 
   // 销售
   amazonOrdersFull: { service: lingXingSalesService, methodName: 'fetchAllAmazonOrders', description: '亚马逊订单(全量)', hasListParams: true },
+  listings: { service: lingXingSalesService, methodName: 'fetchAllListings', description: '亚马逊Listing(全量)' },
 
   // 亚马逊报表（全量拉取）
   allOrdersReportFull: { service: lingXingAmazonService, methodName: 'fetchAllOrdersReport', description: '所有订单报表(全量)', hasListParams: true },
@@ -152,6 +153,7 @@ const FULL_SYNC_ARCHIVE_MAP = {
   sellerProfitReport: [{ model: 'lingXingSellerProfitReport', accountField: 'accountId' }],
   localProductsFull: [{ model: 'lingXingLocalProduct', accountField: 'accountId' }],
   amazonOrdersFull: [{ model: 'lingXingAmazonOrder', accountField: 'accountId' }],
+  listings: [{ model: 'lingXingAmazonListing', accountField: 'accountId' }],
   allOrdersReportFull: [{ model: 'lingXingAmazonReport', accountField: 'accountId' }]
 };
 
