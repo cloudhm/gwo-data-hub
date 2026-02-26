@@ -39,6 +39,11 @@ class RateLimiter {
       '/bd/sp/api/open/monthly/receivable/report/list': 1,
       '/bd/sp/api/open/monthly/receivable/report/list/detail': 1,
       '/bd/sp/api/open/monthly/receivable/report/list/detail/info': 1,
+      '/bd/sp/api/open/settlement/summary/list': 10,
+      '/bd/sp/api/open/settlement/transaction/detail/list': 10,
+      '/cost/center/ods/detail/query': 10,
+      '/cost/center/ods/summary/query': 10,
+      '/cost/center/api/settlement/report': 3,
       '/erp/sc/data/sales_report/asinDailyLists': 5,
       '/bd/productPerformance/openApi/asinList': 1,
       '/bd/profit/statistics/open/msku/list': 10
