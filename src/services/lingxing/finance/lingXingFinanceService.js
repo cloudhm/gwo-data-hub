@@ -1,6 +1,7 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
 import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
+import lingXingSyncStateService from '../sync/lingXingSyncStateService.js';
 
 /**
  * 领星ERP财务管理服务
@@ -724,6 +725,46 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
+   * 按天拉取利润报表-ASIN并按天覆盖保存（startDate=endDate 同一天，多天拆分，默认回退90天）
+   */
+  async fetchAllAsinProfitReportsByDayRange(accountId, listParams = {}, options = {}) {
+    const { pageSize = 1000, delayBetweenPages = 500, onProgress = null } = options;
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(start, end);
+    let totalRecords = 0;
+    const baseParams = { ...listParams };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const allRecords = [];
+      let offset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+      const actualPageSize = Math.min(pageSize, 10000);
+      while (hasMore) {
+        const res = await this.getAsinProfitReport(accountId, { ...baseParams, startDate: day, endDate: day, offset, length: actualPageSize });
+        const pageRecords = res.data || [];
+        const total = res.total ?? pageRecords.length;
+        if (offset === 0) totalCount = total;
+        allRecords.push(...pageRecords);
+        if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+        else { offset += actualPageSize; if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages)); }
+      }
+      if (allRecords.length > 0) {
+        await this.saveAsinProfitReportsForDay(accountId, allRecords, day);
+        totalRecords += allRecords.length;
+      }
+      if (onProgress) onProgress(i + 1, days.length, day, totalRecords);
+    }
+    return { total: totalRecords, data: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
+  }
+
+  /**
    * 查询利润报表-父ASIN
    * API: POST /bd/profit/report/open/report/parent/asin/list
    * 令牌桶容量: 10
@@ -930,6 +971,46 @@ class LingXingFinanceService extends LingXingApiClient {
       console.error('自动拉取所有利润报表-父ASIN数据失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 按天拉取利润报表-父ASIN并按天覆盖保存（startDate=endDate 同一天，多天拆分，默认回退90天）
+   */
+  async fetchAllParentAsinProfitReportsByDayRange(accountId, listParams = {}, options = {}) {
+    const { pageSize = 1000, delayBetweenPages = 500, onProgress = null } = options;
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(start, end);
+    let totalRecords = 0;
+    const baseParams = { ...listParams };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const allRecords = [];
+      let offset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+      const actualPageSize = Math.min(pageSize, 10000);
+      while (hasMore) {
+        const res = await this.getParentAsinProfitReport(accountId, { ...baseParams, startDate: day, endDate: day, offset, length: actualPageSize });
+        const pageRecords = res.data || [];
+        const total = res.total ?? pageRecords.length;
+        if (offset === 0) totalCount = total;
+        allRecords.push(...pageRecords);
+        if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+        else { offset += actualPageSize; if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages)); }
+      }
+      if (allRecords.length > 0) {
+        await this.saveParentAsinProfitReportsForDay(accountId, allRecords, day);
+        totalRecords += allRecords.length;
+      }
+      if (onProgress) onProgress(i + 1, days.length, day, totalRecords);
+    }
+    return { total: totalRecords, data: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
   }
 
   /**
@@ -1340,6 +1421,46 @@ class LingXingFinanceService extends LingXingApiClient {
       console.error('自动拉取所有利润报表-店铺数据失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 按天拉取利润报表-店铺并按天覆盖保存（startDate=endDate 同一天，多天拆分，默认回退90天）
+   */
+  async fetchAllSellerProfitReportsByDayRange(accountId, listParams = {}, options = {}) {
+    const { pageSize = 1000, delayBetweenPages = 500, onProgress = null } = options;
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(start, end);
+    let totalRecords = 0;
+    const baseParams = { ...listParams };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const allRecords = [];
+      let offset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+      const actualPageSize = Math.min(pageSize, 10000);
+      while (hasMore) {
+        const res = await this.getSellerProfitReport(accountId, { ...baseParams, startDate: day, endDate: day, offset, length: actualPageSize });
+        const pageRecords = res.data || [];
+        const total = res.total ?? pageRecords.length;
+        if (offset === 0) totalCount = total;
+        allRecords.push(...pageRecords);
+        if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+        else { offset += actualPageSize; if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages)); }
+      }
+      if (allRecords.length > 0) {
+        await this.saveSellerProfitReportsForDay(accountId, allRecords, day);
+        totalRecords += allRecords.length;
+      }
+      if (onProgress) onProgress(i + 1, days.length, day, totalRecords);
+    }
+    return { total: totalRecords, data: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
   }
 
   /**
@@ -1926,6 +2047,29 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
+   * 拉取某张发票下的全部广告发票活动列表（分页拉全）
+   */
+  async fetchAllAdsInvoiceCampaignListForInvoice(accountId, params, options = {}) {
+    const { delayBetweenPages = 200 } = options;
+    const pageSize = 100;
+    const list = [];
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const res = await this.getAdsInvoiceCampaignList(accountId, { ...params, offset, length: pageSize });
+      const page = res.data || [];
+      list.push(...page);
+      const total = res.total ?? 0;
+      if (page.length < pageSize || (total > 0 && list.length >= total)) hasMore = false;
+      else {
+        offset += pageSize;
+        if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+      }
+    }
+    return list;
+  }
+
+  /**
    * 自动拉取所有广告发票列表数据（自动处理分页）
    * @param {string} accountId - 领星账户ID
    * @param {Object} listParams - 广告发票列表查询参数（同 getAdsInvoiceList，但不需要 offset 和 length）
@@ -2072,14 +2216,14 @@ class LingXingFinanceService extends LingXingApiClient {
       if (params.status !== undefined) {
         requestParams.status = parseInt(params.status);
       }
-      if (params.search_field_time) {
+      // API 要求：search_field_time、start_date、end_date 必须同时填写或都不填
+      const hasDateRange = params.start_date || params.end_date;
+      if (hasDateRange) {
+        requestParams.search_field_time = params.search_field_time || 'apply_time';
+        if (params.start_date) requestParams.start_date = params.start_date;
+        if (params.end_date) requestParams.end_date = params.end_date;
+      } else if (params.search_field_time) {
         requestParams.search_field_time = params.search_field_time;
-      }
-      if (params.start_date) {
-        requestParams.start_date = params.start_date;
-      }
-      if (params.end_date) {
-        requestParams.end_date = params.end_date;
       }
       if (params.search_field) {
         requestParams.search_field = params.search_field;
@@ -2746,6 +2890,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
   /**
    * 自动拉取所有请款池-货款现结数据（自动处理分页）
+   * 支持增量：listParams 传 start_date/end_date 时映射为 start_time/end_time，并默认 time_field=create_time
    */
   async fetchAllRequestFundsPoolPurchase(accountId, listParams = {}, options = {}) {
     const {
@@ -2753,6 +2898,11 @@ class LingXingFinanceService extends LingXingApiClient {
       delayBetweenPages = 500,
       onProgress = null
     } = options;
+
+    const apiParams = { ...listParams };
+    if (apiParams.start_date != null) { apiParams.start_time = apiParams.start_time ?? apiParams.start_date; delete apiParams.start_date; }
+    if (apiParams.end_date != null) { apiParams.end_time = apiParams.end_time ?? apiParams.end_date; delete apiParams.end_date; }
+    if ((apiParams.start_time || apiParams.end_time) && !apiParams.time_field) apiParams.time_field = 'create_time';
 
     try {
       console.log('开始自动拉取所有请款池-货款现结数据...');
@@ -2770,7 +2920,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
         try {
           const pageResult = await this.getRequestFundsPoolPurchaseList(accountId, {
-            ...listParams,
+            ...apiParams,
             offset: offset,
             length: actualPageSize
           });
@@ -2830,6 +2980,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
   /**
    * 自动拉取所有请款池-货款月结数据（自动处理分页）
+   * 支持增量：listParams 传 start_date/end_date 时映射为 start_time/end_time，默认 time_field=create_time
    */
   async fetchAllRequestFundsPoolInbound(accountId, listParams = {}, options = {}) {
     const {
@@ -2837,6 +2988,11 @@ class LingXingFinanceService extends LingXingApiClient {
       delayBetweenPages = 500,
       onProgress = null
     } = options;
+
+    const apiParams = { ...listParams };
+    if (apiParams.start_date != null) { apiParams.start_time = apiParams.start_time ?? apiParams.start_date; delete apiParams.start_date; }
+    if (apiParams.end_date != null) { apiParams.end_time = apiParams.end_time ?? apiParams.end_date; delete apiParams.end_date; }
+    if ((apiParams.start_time || apiParams.end_time) && !apiParams.time_field) apiParams.time_field = 'create_time';
 
     try {
       console.log('开始自动拉取所有请款池-货款月结数据...');
@@ -2854,7 +3010,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
         try {
           const pageResult = await this.getRequestFundsPoolInboundList(accountId, {
-            ...listParams,
+            ...apiParams,
             offset: offset,
             length: actualPageSize
           });
@@ -2914,6 +3070,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
   /**
    * 自动拉取所有请款池-货款预付款数据（自动处理分页）
+   * 支持增量：listParams 传 start_date/end_date 时映射为 start_time/end_time，默认 time_field=create_time
    */
   async fetchAllRequestFundsPoolPrepay(accountId, listParams = {}, options = {}) {
     const {
@@ -2921,6 +3078,11 @@ class LingXingFinanceService extends LingXingApiClient {
       delayBetweenPages = 500,
       onProgress = null
     } = options;
+
+    const apiParams = { ...listParams };
+    if (apiParams.start_date != null) { apiParams.start_time = apiParams.start_time ?? apiParams.start_date; delete apiParams.start_date; }
+    if (apiParams.end_date != null) { apiParams.end_time = apiParams.end_time ?? apiParams.end_date; delete apiParams.end_date; }
+    if ((apiParams.start_time || apiParams.end_time) && !apiParams.time_field) apiParams.time_field = 'create_time';
 
     try {
       console.log('开始自动拉取所有请款池-货款预付款数据...');
@@ -2938,7 +3100,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
         try {
           const pageResult = await this.getRequestFundsPoolPrepayList(accountId, {
-            ...listParams,
+            ...apiParams,
             offset: offset,
             length: actualPageSize
           });
@@ -2998,6 +3160,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
   /**
    * 自动拉取所有请款池-物流请款数据（自动处理分页）
+   * 支持增量：listParams 传 start_date/end_date 时映射为 start_time/end_time，默认 search_field_time=create_time
    */
   async fetchAllRequestFundsPoolLogistics(accountId, listParams = {}, options = {}) {
     const {
@@ -3005,6 +3168,11 @@ class LingXingFinanceService extends LingXingApiClient {
       delayBetweenPages = 500,
       onProgress = null
     } = options;
+
+    const apiParams = { ...listParams };
+    if (apiParams.start_date != null) { apiParams.start_time = apiParams.start_time ?? apiParams.start_date; delete apiParams.start_date; }
+    if (apiParams.end_date != null) { apiParams.end_time = apiParams.end_time ?? apiParams.end_date; delete apiParams.end_date; }
+    if ((apiParams.start_time || apiParams.end_time) && !apiParams.search_field_time) apiParams.search_field_time = 'create_time';
 
     try {
       console.log('开始自动拉取所有请款池-物流请款数据...');
@@ -3022,7 +3190,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
         try {
           const pageResult = await this.getRequestFundsPoolLogisticsList(accountId, {
-            ...listParams,
+            ...apiParams,
             offset: offset,
             length: actualPageSize
           });
@@ -3082,6 +3250,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
   /**
    * 自动拉取所有请款池-其他应付款数据（自动处理分页）
+   * 支持增量：listParams 传 start_date/end_date 时映射为 start_time/end_time，默认 search_field_time=create_time
    */
   async fetchAllRequestFundsPoolCustomFee(accountId, listParams = {}, options = {}) {
     const {
@@ -3089,6 +3258,11 @@ class LingXingFinanceService extends LingXingApiClient {
       delayBetweenPages = 500,
       onProgress = null
     } = options;
+
+    const apiParams = { ...listParams };
+    if (apiParams.start_date != null) { apiParams.start_time = apiParams.start_time ?? apiParams.start_date; delete apiParams.start_date; }
+    if (apiParams.end_date != null) { apiParams.end_time = apiParams.end_time ?? apiParams.end_date; delete apiParams.end_date; }
+    if ((apiParams.start_time || apiParams.end_time) && !apiParams.search_field_time) apiParams.search_field_time = 'create_time';
 
     try {
       console.log('开始自动拉取所有请款池-其他应付款数据...');
@@ -3106,7 +3280,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
         try {
           const pageResult = await this.getRequestFundsPoolCustomFeeList(accountId, {
-            ...listParams,
+            ...apiParams,
             offset: offset,
             length: actualPageSize
           });
@@ -3166,6 +3340,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
   /**
    * 自动拉取所有请款池-其他费用数据（自动处理分页）
+   * 支持增量：listParams 传 start_date/end_date 时映射为 startTime/endTime，默认 searchFieldTime=create_time
    */
   async fetchAllRequestFundsPoolOtherFee(accountId, listParams = {}, options = {}) {
     const {
@@ -3173,6 +3348,11 @@ class LingXingFinanceService extends LingXingApiClient {
       delayBetweenPages = 500,
       onProgress = null
     } = options;
+
+    const apiParams = { ...listParams };
+    if (apiParams.start_date != null) { apiParams.startTime = apiParams.startTime ?? apiParams.start_date; delete apiParams.start_date; }
+    if (apiParams.end_date != null) { apiParams.endTime = apiParams.endTime ?? apiParams.end_date; delete apiParams.end_date; }
+    if ((apiParams.startTime || apiParams.endTime) && !apiParams.searchFieldTime) apiParams.searchFieldTime = 'create_time';
 
     try {
       console.log('开始自动拉取所有请款池-其他费用数据...');
@@ -3190,7 +3370,7 @@ class LingXingFinanceService extends LingXingApiClient {
 
         try {
           const pageResult = await this.getRequestFundsPoolOtherFeeList(accountId, {
-            ...listParams,
+            ...apiParams,
             offset: offset,
             length: actualPageSize
           });
@@ -3498,6 +3678,860 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
+   * 保存应收报告详情-基础信息（单条，upsert by accountId + sid + currencyCode + settleMonth）
+   */
+  async saveReceivableReportDetailInfo(accountId, sid, currencyCode, settleMonth, data) {
+    if (!prisma.lingXingReceivableReportDetailInfo) return;
+    const sidVal = sid != null ? parseInt(sid) : null;
+    await prisma.lingXingReceivableReportDetailInfo.upsert({
+      where: {
+        accountId_sid_currencyCode_settleMonth: {
+          accountId,
+          sid: sidVal,
+          currencyCode: currencyCode ?? '',
+          settleMonth: settleMonth ?? ''
+        }
+      },
+      update: { data: data ?? undefined, archived: false, updatedAt: new Date() },
+      create: {
+        accountId,
+        sid: sidVal,
+        currencyCode: currencyCode ?? '',
+        settleMonth: settleMonth ?? '',
+        data: data ?? undefined,
+        archived: false
+      }
+    });
+  }
+
+  /**
+   * 获取某账户某月已存在的 (sid, currencyCode) 列表，用于详情列表/详情信息的增量拉取
+   * 优先从详情表取，若无则从主报告表取 sid，currencyCode 用默认 USD
+   */
+  async _getReceivableDetailKeysForMonth(accountId, settleMonth) {
+    const details = await prisma.lingXingReceivableReportDetail.findMany({
+      where: { accountId, settleMonth, archived: false },
+      select: { sid: true, data: true }
+    });
+    const set = new Set();
+    const list = [];
+    for (const row of details) {
+      const sid = row.sid != null ? row.sid : null;
+      const code = (row.data && typeof row.data === 'object' && row.data.currencyCode) ? String(row.data.currencyCode) : 'USD';
+      const key = `${sid}\t${code}`;
+      if (!set.has(key)) {
+        set.add(key);
+        list.push({ sid, currencyCode: code });
+      }
+    }
+    if (list.length > 0) return list;
+
+    const reports = await prisma.lingXingReceivableReport.findMany({
+      where: { accountId, settleMonth, archived: false },
+      select: { sid: true, data: true }
+    });
+    for (const row of reports) {
+      const sid = row.sid != null ? row.sid : null;
+      const code = (row.data && typeof row.data === 'object' && row.data.currencyCode) ? String(row.data.currencyCode) : 'USD';
+      const key = `${sid}\t${code}`;
+      if (!set.has(key)) {
+        set.add(key);
+        list.push({ sid, currencyCode: code });
+      }
+    }
+    return list;
+  }
+
+  /**
+   * 结算中心-结算汇总列表
+   * API: POST /bd/sp/api/open/settlement/summary/list  令牌桶容量: 10
+   * @param {Object} params - dateType(必填 0/1/2), startDate, endDate(必填，间隔≤90天), offset, length, countryCodes, sids, currencyCode, searchField, searchValue
+   * @returns {Promise<{ records: [], total: number }>}
+   */
+  async getSettlementSummaryList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+      if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+      if (params.dateType === undefined || params.dateType === null) throw new Error('dateType 为必填（0 结算开始 1 结算结束 2 转账时间）');
+      if (!params.startDate || !params.endDate) throw new Error('startDate、endDate 为必填，时间间隔最长 90 天');
+
+      const requestParams = {
+        dateType: Number(params.dateType),
+        startDate: params.startDate,
+        endDate: params.endDate,
+        offset: params.offset !== undefined ? parseInt(params.offset) : 0,
+        length: params.length !== undefined ? Math.min(parseInt(params.length), 100) : 20
+      };
+      if (params.countryCodes && Array.isArray(params.countryCodes)) requestParams.countryCodes = params.countryCodes.map(Number);
+      if (params.sids && Array.isArray(params.sids)) requestParams.sids = params.sids.map(sid => parseInt(sid));
+      if (params.currencyCode) requestParams.currencyCode = params.currencyCode;
+      if (params.searchField) requestParams.searchField = params.searchField;
+      if (params.searchValue && Array.isArray(params.searchValue)) requestParams.searchValue = params.searchValue;
+
+      const response = await this.post(account, '/bd/sp/api/open/settlement/summary/list', requestParams, { successCode: [0, 200, '200'] });
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || response.msg || '获取结算汇总列表失败');
+      }
+      const data = response.data || {};
+      const records = data.records || [];
+      const total = data.total !== undefined ? data.total : records.length;
+      return { records, total };
+    } catch (error) {
+      console.error('获取结算中心-结算汇总列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 按日拉取结算汇总并保存（startDate=endDate 同一天逐天查询，时间间隔最长 90 天）
+   * listParams: start_date/end_date 或 startDate/endDate, dateType 默认 1（结算结束时间）
+   */
+  async fetchAllSettlementSummaryList(accountId, listParams = {}, options = {}) {
+    const { pageSize = 20, delayBetweenPages = 500, onProgress = null } = options;
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const dateType = listParams.dateType !== undefined ? Number(listParams.dateType) : 1;
+    const days = this._getDaysBetween(start, end);
+    if (days.length > 90) throw new Error('结算汇总时间间隔最长不得超过 90 天');
+    const baseParams = { ...listParams, dateType };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+
+    let totalRecords = 0;
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const allRecords = [];
+      let offset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+      const actualPageSize = Math.min(pageSize, 100);
+      while (hasMore) {
+        const res = await this.getSettlementSummaryList(accountId, {
+          ...baseParams,
+          startDate: day,
+          endDate: day,
+          offset,
+          length: actualPageSize
+        });
+        const pageRecords = res.records || [];
+        const total = res.total ?? pageRecords.length;
+        if (offset === 0) totalCount = total;
+        allRecords.push(...pageRecords);
+        if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+        else {
+          offset += actualPageSize;
+          if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+        }
+      }
+      if (allRecords.length > 0) {
+        await this.saveSettlementSummariesForDay(accountId, allRecords, day, dateType);
+        totalRecords += allRecords.length;
+      }
+      if (onProgress) onProgress(i + 1, days.length, day, totalRecords);
+    }
+    return { total: totalRecords, data: totalRecords, records: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
+  }
+
+  /**
+   * 按日保存结算汇总（先软删该 accountId+dateType+settleDate 再 upsert）
+   */
+  async saveSettlementSummariesForDay(accountId, records, settleDate, dateType) {
+    try {
+      if (!prisma.lingXingSettlementSummary) return;
+      const day = String(settleDate).trim().slice(0, 10);
+      const dateTypeNum = Number(dateType);
+      await prisma.lingXingSettlementSummary.updateMany({
+        where: { accountId, settleDate: day, dateType: dateTypeNum },
+        data: { archived: true, updatedAt: new Date() }
+      });
+      for (const row of records) {
+        const recordId = row.id != null ? String(row.id) : '';
+        if (!recordId) continue;
+        const sidVal = row.sid != null ? parseInt(row.sid) : null;
+        await prisma.lingXingSettlementSummary.upsert({
+          where: {
+            accountId_recordId_dateType_settleDate: {
+              accountId,
+              recordId,
+              dateType: dateTypeNum,
+              settleDate: day
+            }
+          },
+          update: { sid: sidVal, data: row, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            recordId,
+            dateType: dateTypeNum,
+            settleDate: day,
+            sid: sidVal,
+            data: row,
+            archived: false
+          }
+        });
+      }
+      if (records.length > 0) console.log(`结算汇总已按日保存: settleDate=${day} dateType=${dateTypeNum} 共 ${records.length} 条`);
+    } catch (error) {
+      console.error('保存结算汇总到数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 结算中心-交易明细列表
+   * API: POST /bd/sp/api/open/settlement/transaction/detail/list  令牌桶容量: 10
+   * 无搜索值时，结算时间(startDate+endDate)与修改时间(gmtModifiedStart+gmtModifiedEnd)二选一必填；时间间隔不得超过 7 天；length 上限 10000
+   * @returns {Promise<{ records: [], total: number }>}
+   */
+  async getSettlementTransactionDetailList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+      if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+      const hasSettle = params.startDate && params.endDate;
+      const hasModified = params.gmtModifiedStart && params.gmtModifiedEnd;
+      if (!hasSettle && !hasModified) throw new Error('startDate+endDate 或 gmtModifiedStart+gmtModifiedEnd 二选一必填');
+      if (hasSettle) {
+        const a = new Date(params.startDate);
+        const b = new Date(params.endDate);
+        if (Math.ceil((b - a) / (24 * 3600 * 1000)) > 7) throw new Error('结算时间间隔不得超过 7 天');
+      }
+
+      const requestParams = {
+        offset: params.offset !== undefined ? parseInt(params.offset) : 0,
+        length: params.length !== undefined ? Math.min(parseInt(params.length), 10000) : 20
+      };
+      if (params.startDate) requestParams.startDate = params.startDate;
+      if (params.endDate) requestParams.endDate = params.endDate;
+      if (params.gmtModifiedStart) requestParams.gmtModifiedStart = params.gmtModifiedStart;
+      if (params.gmtModifiedEnd) requestParams.gmtModifiedEnd = params.gmtModifiedEnd;
+      if (params.countryCodes && Array.isArray(params.countryCodes)) requestParams.countryCodes = params.countryCodes.map(Number);
+      if (params.sids && Array.isArray(params.sids)) requestParams.sids = params.sids.map(sid => parseInt(sid));
+      if (params.eventType) requestParams.eventType = params.eventType;
+      if (params.type) requestParams.type = params.type;
+      if (params.searchField) requestParams.searchField = params.searchField;
+      if (params.searchValue && Array.isArray(params.searchValue)) requestParams.searchValue = params.searchValue;
+
+      const response = await this.post(account, '/bd/sp/api/open/settlement/transaction/detail/list', requestParams, { successCode: [0, 200, '200'] });
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || response.msg || '获取结算中心-交易明细列表失败');
+      }
+      const data = response.data || {};
+      const records = data.records || [];
+      const total = data.total !== undefined ? data.total : records.length;
+      return { records, total };
+    } catch (error) {
+      console.error('获取结算中心-交易明细列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 从数据库获取账户下店铺 sid 列表（用于按 sid 遍历查询）
+   */
+  async _getSidsForAccount(accountId) {
+    const rows = await prisma.lingXingSeller.findMany({
+      where: { accountId, archived: false },
+      select: { sid: true }
+    });
+    return rows.map(r => r.sid);
+  }
+
+  /**
+   * 从数据库获取账户下亚马逊 sellerId 列表（用于按 sellerId 遍历查询，过滤空值）
+   */
+  async _getSellerIdsForAccount(accountId) {
+    const rows = await prisma.lingXingSeller.findMany({
+      where: { accountId, archived: false },
+      select: { sellerId: true }
+    });
+    return rows.map(r => r.sellerId).filter(Boolean);
+  }
+
+  /**
+   * 从数据库获取账户下店铺列表（sid + sellerId），用于需同时传 sid 与 sellerId 的接口
+   */
+  async _getSellersForAccount(accountId) {
+    const rows = await prisma.lingXingSeller.findMany({
+      where: { accountId, archived: false },
+      select: { sid: true, sellerId: true }
+    });
+    return rows.filter(r => r.sellerId != null && r.sellerId !== '');
+  }
+
+  /**
+   * 从数据库获取账户下店铺名列表（用于 FBA 成本流水等按 shop_names 遍历的接口，过滤空值）
+   */
+  async _getShopNamesForAccount(accountId) {
+    const rows = await prisma.lingXingSeller.findMany({
+      where: { accountId, archived: false },
+      select: { name: true }
+    });
+    return rows.map(r => (r.name != null && String(r.name).trim() !== '') ? String(r.name).trim() : null).filter(Boolean);
+  }
+
+  /**
+   * 按日拉取结算中心-交易明细并保存：从 DB 遍历 sid，每天 startDate=endDate=day 查询并分页，按日保存；eventType=ServiceFeeEventList 按日先删后插
+   * 若日期范围超过 7 天则自动按 7 天一段拆分多段拉取
+   */
+  async fetchAllSettlementTransactionDetailList(accountId, listParams = {}, options = {}) {
+    const { pageSize = 5000, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 10000);
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const allDays = this._getDaysBetween(start, end);
+
+    const sids = await this._getSidsForAccount(accountId);
+    if (sids.length === 0) {
+      console.log(`[settlementTransactionDetail] accountId=${accountId} 无店铺 sid，跳过`);
+      return { total: 0, data: 0, records: 0, stats: { daysProcessed: 0, totalRecords: 0 } };
+    }
+
+    const baseParams = { ...listParams };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+
+    let totalRecords = 0;
+    let done = 0;
+    const totalSteps = sids.length * allDays.length;
+
+    for (let chunkStart = 0; chunkStart < allDays.length; chunkStart += 7) {
+      const chunkDays = allDays.slice(chunkStart, chunkStart + 7);
+      for (const sid of sids) {
+        for (const day of chunkDays) {
+          const allRecords = [];
+          let offset = 0;
+          let totalCount = 0;
+          let hasMore = true;
+          while (hasMore) {
+            const res = await this.getSettlementTransactionDetailList(accountId, {
+              ...baseParams,
+              sids: [sid],
+              startDate: day,
+              endDate: day,
+              offset,
+              length: actualPageSize
+            });
+            const pageRecords = res.records || [];
+            const total = res.total ?? pageRecords.length;
+            if (offset === 0) totalCount = total;
+            allRecords.push(...pageRecords);
+            if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+            else {
+              offset += actualPageSize;
+              if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+            }
+          }
+          if (allRecords.length > 0) {
+            await this.saveSettlementTransactionDetailsForDay(accountId, sid, allRecords, day);
+            totalRecords += allRecords.length;
+          }
+          done++;
+          if (onProgress) onProgress(done, totalSteps, day, totalRecords);
+        }
+      }
+    }
+
+    console.log(`结算中心-交易明细拉取完成: ${start}~${end} sids=${sids.length} 共 ${totalRecords} 条`);
+    return { total: totalRecords, data: totalRecords, records: totalRecords, stats: { daysProcessed: allDays.length, totalRecords } };
+  }
+
+  /**
+   * 按日保存结算中心-交易明细：eventType=ServiceFeeEventList 时先软删该 (accountId,sid,settleDate,eventType) 再插入；其余按 (accountId,sid,settleDate,uniqueKey) upsert
+   */
+  async saveSettlementTransactionDetailsForDay(accountId, sid, records, settleDate) {
+    try {
+      if (!prisma.lingXingSettlementTransactionDetail) return;
+      const day = String(settleDate).trim().slice(0, 10);
+      const sidVal = parseInt(sid);
+
+      const serviceFeeList = [];
+      const others = [];
+      for (const r of records) {
+        const et = (r.eventType || '').toLowerCase();
+        if (et === 'servicefeeeventlist') serviceFeeList.push(r);
+        else others.push(r);
+      }
+
+      if (serviceFeeList.length > 0) {
+        const eventTypeVal = serviceFeeList[0].eventType || 'ServiceFeeEventList';
+        await prisma.lingXingSettlementTransactionDetail.updateMany({
+          where: { accountId, sid: sidVal, settleDate: day, eventType: eventTypeVal },
+          data: { archived: true, updatedAt: new Date() }
+        });
+        for (let i = 0; i < serviceFeeList.length; i++) {
+          const row = serviceFeeList[i];
+          const uniqueKey = (row.uniqueKey != null && String(row.uniqueKey).trim()) ? String(row.uniqueKey).trim() : `sf_${row.id ?? i}_${i}`;
+          await prisma.lingXingSettlementTransactionDetail.create({
+            data: {
+              accountId,
+              sid: sidVal,
+              settleDate: day,
+              uniqueKey,
+              eventType: row.eventType || 'ServiceFeeEventList',
+              data: row,
+              archived: false
+            }
+          });
+        }
+      }
+
+      for (let i = 0; i < others.length; i++) {
+        const row = others[i];
+        const uniqueKey = (row.uniqueKey != null && String(row.uniqueKey).trim()) ? String(row.uniqueKey).trim() : (row.id != null ? String(row.id) : `u_${day}_${sidVal}_${i}`);
+        await prisma.lingXingSettlementTransactionDetail.upsert({
+          where: {
+            accountId_sid_settleDate_uniqueKey: {
+              accountId,
+              sid: sidVal,
+              settleDate: day,
+              uniqueKey
+            }
+          },
+          update: { data: row, eventType: row.eventType ?? null, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            sid: sidVal,
+            settleDate: day,
+            uniqueKey,
+            eventType: row.eventType ?? null,
+            data: row,
+            archived: false
+          }
+        });
+      }
+
+      if (records.length > 0) console.log(`结算中心-交易明细已按日保存: sid=${sidVal} settleDate=${day} 共 ${records.length} 条`);
+    } catch (error) {
+      console.error('保存结算中心-交易明细到数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 库存分类账 detail 列表（GET_LEDGER_DETAIL_VIEW_DATA）
+   * API: POST /cost/center/ods/detail/query  令牌桶: 10  code 1 成功
+   * @param params.sellerIds 必填 [string], startDate/endDate 必填 Y-m-d, offset/length(上限1000), fnskus, asins, mskus, eventTypes, disposition, locations, referenceId
+   */
+  async getInventoryLedgerDetailList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+      if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+      if (!params.sellerIds || !Array.isArray(params.sellerIds) || params.sellerIds.length === 0) throw new Error('sellerIds 为必填且非空数组');
+      if (!params.startDate || !params.endDate) throw new Error('startDate、endDate 为必填');
+
+      const requestParams = {
+        sellerIds: params.sellerIds,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        offset: params.offset !== undefined ? parseInt(params.offset) : 0,
+        length: params.length !== undefined ? Math.min(parseInt(params.length), 1000) : 20
+      };
+      if (params.fnskus && Array.isArray(params.fnskus)) requestParams.fnskus = params.fnskus;
+      if (params.asins && Array.isArray(params.asins)) requestParams.asins = params.asins;
+      if (params.mskus && Array.isArray(params.mskus)) requestParams.mskus = params.mskus;
+      if (params.eventTypes && Array.isArray(params.eventTypes)) requestParams.eventTypes = params.eventTypes;
+      if (params.disposition) requestParams.disposition = params.disposition;
+      if (params.locations && Array.isArray(params.locations)) requestParams.locations = params.locations;
+      if (params.referenceId) requestParams.referenceId = params.referenceId;
+
+      const response = await this.post(account, '/cost/center/ods/detail/query', requestParams, { successCode: [1] });
+      if (response.code !== 1) throw new Error(response.msg || response.message || '获取库存分类账detail失败');
+      const data = response.data || {};
+      const records = data.records || [];
+      const total = data.total !== undefined ? data.total : records.length;
+      return { records, total };
+    } catch (error) {
+      console.error('获取库存分类账detail失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 按日拉取库存分类账 detail：遍历 sellerId，每天 startDate=endDate=day 查询并分页保存
+   */
+  async fetchAllInventoryLedgerDetailList(accountId, listParams = {}, options = {}) {
+    const { pageSize = 500, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 1000);
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(start, end);
+    const sellerIds = await this._getSellerIdsForAccount(accountId);
+    if (sellerIds.length === 0) {
+      console.log(`[inventoryLedgerDetail] accountId=${accountId} 无 sellerId，跳过`);
+      return { total: 0, data: 0, records: 0, stats: { daysProcessed: 0, totalRecords: 0 } };
+    }
+
+    const baseParams = { ...listParams };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+
+    let totalRecords = 0;
+    let done = 0;
+    const totalSteps = sellerIds.length * days.length;
+    for (const sellerId of sellerIds) {
+      for (const day of days) {
+        const allRecords = [];
+        let offset = 0;
+        let totalCount = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const res = await this.getInventoryLedgerDetailList(accountId, {
+            ...baseParams,
+            sellerIds: [sellerId],
+            startDate: day,
+            endDate: day,
+            offset,
+            length: actualPageSize
+          });
+          const pageRecords = res.records || [];
+          const total = res.total ?? pageRecords.length;
+          if (offset === 0) totalCount = total;
+          allRecords.push(...pageRecords);
+          if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+          else {
+            offset += actualPageSize;
+            if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+          }
+        }
+        if (allRecords.length > 0) {
+          await this.saveInventoryLedgerDetailsForDay(accountId, sellerId, allRecords, day);
+          totalRecords += allRecords.length;
+        }
+        done++;
+        if (onProgress) onProgress(done, totalSteps, day, totalRecords);
+      }
+    }
+    console.log(`库存分类账detail拉取完成: ${start}~${end} sellerIds=${sellerIds.length} 共 ${totalRecords} 条`);
+    return { total: totalRecords, data: totalRecords, records: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
+  }
+
+  /**
+   * 按日保存库存分类账 detail（唯一键 sellerId+settleDate+uniqueMd5Idx+uniqueMd5）
+   */
+  async saveInventoryLedgerDetailsForDay(accountId, sellerId, records, settleDate) {
+    try {
+      if (!prisma.lingXingInventoryLedgerDetail) return;
+      const day = String(settleDate).trim().slice(0, 10);
+      for (const row of records) {
+        const idx = (row.uniqueMd5Idx != null && String(row.uniqueMd5Idx).trim()) ? String(row.uniqueMd5Idx).trim() : '0';
+        const md5 = (row.uniqueMd5 != null && String(row.uniqueMd5).trim()) ? String(row.uniqueMd5).trim() : '0';
+        await prisma.lingXingInventoryLedgerDetail.upsert({
+          where: {
+            inv_ledger_detail_account_seller_date_md5: {
+              accountId,
+              sellerId: String(sellerId),
+              settleDate: day,
+              uniqueMd5Idx: idx,
+              uniqueMd5: md5
+            }
+          },
+          update: { data: row, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            sellerId: String(sellerId),
+            settleDate: day,
+            uniqueMd5Idx: idx,
+            uniqueMd5: md5,
+            data: row,
+            archived: false
+          }
+        });
+      }
+      if (records.length > 0) console.log(`库存分类账detail已按日保存: sellerId=${sellerId} settleDate=${day} 共 ${records.length} 条`);
+    } catch (error) {
+      console.error('保存库存分类账detail失败:', error.message);
+    }
+  }
+
+  /**
+   * 库存分类账 summary 列表（queryType=2 按天）
+   * API: POST /cost/center/ods/summary/query  code 1 成功
+   */
+  async getInventoryLedgerSummaryList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+      if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+      if (!params.sellerIds || !Array.isArray(params.sellerIds) || params.sellerIds.length === 0) throw new Error('sellerIds 为必填且非空数组');
+      if (!params.startDate || !params.endDate) throw new Error('startDate、endDate 为必填');
+      const requestParams = {
+        sellerIds: params.sellerIds,
+        queryType: params.queryType !== undefined ? Number(params.queryType) : 2,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        offset: params.offset !== undefined ? parseInt(params.offset) : 0,
+        length: params.length !== undefined ? Math.min(parseInt(params.length), 1000) : 20
+      };
+      if (params.fnskus && Array.isArray(params.fnskus)) requestParams.fnskus = params.fnskus;
+      if (params.asins && Array.isArray(params.asins)) requestParams.asins = params.asins;
+      if (params.mskus && Array.isArray(params.mskus)) requestParams.mskus = params.mskus;
+      if (params.disposition) requestParams.disposition = params.disposition;
+      if (params.locations && Array.isArray(params.locations)) requestParams.locations = params.locations;
+
+      const response = await this.post(account, '/cost/center/ods/summary/query', requestParams, { successCode: [1] });
+      if (response.code !== 1) throw new Error(response.msg || response.message || '获取库存分类账summary失败');
+      const data = response.data || {};
+      const records = data.records || [];
+      const total = data.total !== undefined ? data.total : records.length;
+      return { records, total };
+    } catch (error) {
+      console.error('获取库存分类账summary失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 按日拉取库存分类账 summary（queryType=2 按天），遍历 sellerId，每天查询并保存
+   */
+  async fetchAllInventoryLedgerSummaryList(accountId, listParams = {}, options = {}) {
+    const { pageSize = 500, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 1000);
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(start, end);
+    const sellerIds = await this._getSellerIdsForAccount(accountId);
+    if (sellerIds.length === 0) {
+      console.log(`[inventoryLedgerSummary] accountId=${accountId} 无 sellerId，跳过`);
+      return { total: 0, data: 0, records: 0, stats: { daysProcessed: 0, totalRecords: 0 } };
+    }
+
+    const baseParams = { ...listParams, queryType: 2 };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+
+    let totalRecords = 0;
+    let done = 0;
+    const totalSteps = sellerIds.length * days.length;
+    for (const sellerId of sellerIds) {
+      for (const day of days) {
+        const allRecords = [];
+        let offset = 0;
+        let totalCount = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const res = await this.getInventoryLedgerSummaryList(accountId, {
+            ...baseParams,
+            sellerIds: [sellerId],
+            startDate: day,
+            endDate: day,
+            offset,
+            length: actualPageSize
+          });
+          const pageRecords = res.records || [];
+          const total = res.total ?? pageRecords.length;
+          if (offset === 0) totalCount = total;
+          allRecords.push(...pageRecords);
+          if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+          else {
+            offset += actualPageSize;
+            if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+          }
+        }
+        if (allRecords.length > 0) {
+          await this.saveInventoryLedgerSummaryForDay(accountId, sellerId, allRecords, day);
+          totalRecords += allRecords.length;
+        }
+        done++;
+        if (onProgress) onProgress(done, totalSteps, day, totalRecords);
+      }
+    }
+    console.log(`库存分类账summary拉取完成: ${start}~${end} sellerIds=${sellerIds.length} 共 ${totalRecords} 条`);
+    return { total: totalRecords, data: totalRecords, records: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
+  }
+
+  /**
+   * 按日保存库存分类账 summary（rowKey 用 date+fnsku+msku+disposition+location）
+   */
+  async saveInventoryLedgerSummaryForDay(accountId, sellerId, records, settleDate) {
+    try {
+      if (!prisma.lingXingInventoryLedgerSummary) return;
+      const day = String(settleDate).trim().slice(0, 10);
+      for (const row of records) {
+        const rowKey = `${row.date || day}_${row.fnsku || ''}_${row.msku || ''}_${row.disposition || ''}_${row.location || ''}`;
+        await prisma.lingXingInventoryLedgerSummary.upsert({
+          where: {
+            inv_ledger_summary_account_seller_date_key: {
+              accountId,
+              sellerId: String(sellerId),
+              settleDate: day,
+              rowKey
+            }
+          },
+          update: { data: row, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            sellerId: String(sellerId),
+            settleDate: day,
+            rowKey,
+            data: row,
+            archived: false
+          }
+        });
+      }
+      if (records.length > 0) console.log(`库存分类账summary已按日保存: sellerId=${sellerId} settleDate=${day} 共 ${records.length} 条`);
+    } catch (error) {
+      console.error('保存库存分类账summary失败:', error.message);
+    }
+  }
+
+  /**
+   * 发货结算报告列表
+   * API: POST /cost/center/api/settlement/report  令牌桶: 3  code 1 成功；timeType 06 更新时间
+   */
+  async getSettlementReportList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+      if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+      if (!params.amazonSellerIds || !Array.isArray(params.amazonSellerIds) || params.amazonSellerIds.length === 0) throw new Error('amazonSellerIds 为必填且非空数组');
+      if (!params.sids || !Array.isArray(params.sids) || params.sids.length === 0) throw new Error('sids 为必填且非空数组');
+      if (!params.filterBeginDate || !params.filterEndDate) throw new Error('filterBeginDate、filterEndDate 为必填');
+
+      const requestParams = {
+        amazonSellerIds: params.amazonSellerIds,
+        sids: params.sids.map(sid => parseInt(sid)),
+        timeType: params.timeType || '06',
+        filterBeginDate: params.filterBeginDate,
+        filterEndDate: params.filterEndDate,
+        offset: params.offset !== undefined ? parseInt(params.offset) : 0,
+        length: params.length !== undefined ? Math.min(parseInt(params.length), 1000) : 20
+      };
+      if (params.countryCodes && Array.isArray(params.countryCodes)) requestParams.countryCodes = params.countryCodes;
+      if (params.orderNumbers && Array.isArray(params.orderNumbers)) requestParams.orderNumbers = params.orderNumbers;
+      if (params.shipmentNumbers && Array.isArray(params.shipmentNumbers)) requestParams.shipmentNumbers = params.shipmentNumbers;
+      if (params.mskus && Array.isArray(params.mskus)) requestParams.mskus = params.mskus;
+      if (params.fulfillmentType) requestParams.fulfillmentType = params.fulfillmentType;
+
+      const response = await this.post(account, '/cost/center/api/settlement/report', requestParams, { successCode: [1] });
+      if (response.code !== 1) throw new Error(response.msg || response.message || '获取发货结算报告失败');
+      const data = response.data || {};
+      const records = data.records || [];
+      const total = data.total !== undefined ? data.total : records.length;
+      return { records, total };
+    } catch (error) {
+      console.error('获取发货结算报告失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 按日拉取发货结算报告：遍历 sid+amazonSellerId（从 DB），timeType=06 更新时间，每天查询并保存
+   */
+  async fetchAllSettlementReportList(accountId, listParams = {}, options = {}) {
+    const { pageSize = 500, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 1000);
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(start, end);
+    const sellers = await this._getSellersForAccount(accountId);
+    if (sellers.length === 0) {
+      console.log(`[settlementReport] accountId=${accountId} 无店铺，跳过`);
+      return { total: 0, data: 0, records: 0, stats: { daysProcessed: 0, totalRecords: 0 } };
+    }
+
+    const baseParams = { ...listParams, timeType: listParams.timeType || '06' };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+
+    let totalRecords = 0;
+    let done = 0;
+    const totalSteps = sellers.length * days.length;
+    for (const seller of sellers) {
+      const amazonSellerIds = [seller.sellerId];
+      const sids = [seller.sid];
+      for (const day of days) {
+        const allRecords = [];
+        let offset = 0;
+        let totalCount = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const res = await this.getSettlementReportList(accountId, {
+            ...baseParams,
+            amazonSellerIds,
+            sids,
+            filterBeginDate: day,
+            filterEndDate: day,
+            offset,
+            length: actualPageSize
+          });
+          const pageRecords = res.records || [];
+          const total = res.total ?? pageRecords.length;
+          if (offset === 0) totalCount = total;
+          allRecords.push(...pageRecords);
+          if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+          else {
+            offset += actualPageSize;
+            if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+          }
+        }
+        if (allRecords.length > 0) {
+          await this.saveSettlementReportsForDay(accountId, seller.sid, allRecords, day);
+          totalRecords += allRecords.length;
+        }
+        done++;
+        if (onProgress) onProgress(done, totalSteps, day, totalRecords);
+      }
+    }
+    console.log(`发货结算报告拉取完成: ${start}~${end} 店铺数=${sellers.length} 共 ${totalRecords} 条`);
+    return { total: totalRecords, data: totalRecords, records: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
+  }
+
+  /**
+   * 按日保存发货结算报告（唯一键 sid+settleDate+amazonOrderId+shipmentId+shipmentItemId+msku，空用 ''）
+   */
+  async saveSettlementReportsForDay(accountId, sid, records, settleDate) {
+    try {
+      if (!prisma.lingXingSettlementReport) return;
+      const day = String(settleDate).trim().slice(0, 10);
+      const sidVal = parseInt(sid);
+      for (const row of records) {
+        const amazonOrderId = (row.amazonOrderId != null && String(row.amazonOrderId).trim()) ? String(row.amazonOrderId).trim() : '';
+        const shipmentId = (row.shipmentId != null && String(row.shipmentId).trim()) ? String(row.shipmentId).trim() : '';
+        const shipmentItemId = (row.shipmentItemId != null && String(row.shipmentItemId).trim()) ? String(row.shipmentItemId).trim() : '';
+        const msku = (row.msku != null && String(row.msku).trim()) ? String(row.msku).trim() : '';
+        await prisma.lingXingSettlementReport.upsert({
+          where: {
+            settlement_report_unique: {
+              accountId,
+              sid: sidVal,
+              settleDate: day,
+              amazonOrderId,
+              shipmentId,
+              shipmentItemId,
+              msku
+            }
+          },
+          update: { data: row, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            sid: sidVal,
+            settleDate: day,
+            amazonOrderId,
+            shipmentId,
+            shipmentItemId,
+            msku,
+            data: row,
+            archived: false
+          }
+        });
+      }
+      if (records.length > 0) console.log(`发货结算报告已按日保存: sid=${sidVal} settleDate=${day} 共 ${records.length} 条`);
+    } catch (error) {
+      console.error('保存发货结算报告失败:', error.message);
+    }
+  }
+
+  /**
    * 自动拉取所有应收报告列表数据（自动处理分页）
    */
   async fetchAllReceivableReportList(accountId, listParams = {}, options = {}) {
@@ -3582,6 +4616,253 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
+   * 返回 [startYyyyMm, endYyyyMm] 之间的月份列表（含首尾），格式 'YYYY-MM'
+   */
+  _getMonthsBetween(startYyyyMm, endYyyyMm) {
+    const list = [];
+    const [sy, sm] = startYyyyMm.split('-').map(Number);
+    const [ey, em] = endYyyyMm.split('-').map(Number);
+    for (let y = sy, m = sm; y < ey || (y === ey && m <= em); m++) {
+      if (m > 12) { m = 1; y++; }
+      list.push(`${y}-${String(m).padStart(2, '0')}`);
+    }
+    return list;
+  }
+
+  /**
+   * 应收报告增量同步：按 settleMonth 逐月拉取并保存，当月数据支持重复查询（同月多次拉取会 upsert 覆盖）。
+   * 每月数据有分页，内部已按页拉全后保存。
+   * @param {Object} options - defaultLookbackMonths 无历史状态时回溯月数（默认 12），endMonth 结束月 'YYYY-MM'（默认当前月）
+   */
+  async incrementalSyncReceivableReport(accountId, options = {}) {
+    const taskType = 'receivableReport';
+    const defaultLookbackMonths = Math.min(Math.max(1, options.defaultLookbackMonths ?? 12), 60);
+    const now = new Date();
+    const endMonth = options.endMonth ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const state = await lingXingSyncStateService.getSyncState(accountId, taskType, null);
+    let startMonth;
+    if (state?.lastEndTimestamp) {
+      const d = new Date(state.lastEndTimestamp);
+      const lastYyyyMm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const [y, m] = lastYyyyMm.split('-').map(Number);
+      const nextM = m === 12 ? 1 : m + 1;
+      const nextY = m === 12 ? y + 1 : y;
+      startMonth = `${nextY}-${String(nextM).padStart(2, '0')}`;
+    } else {
+      const d = new Date(now.getFullYear(), now.getMonth() - defaultLookbackMonths + 1, 1);
+      startMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (startMonth > endMonth) startMonth = endMonth;
+    }
+
+    const months = this._getMonthsBetween(startMonth, endMonth);
+    if (months.length === 0) {
+      return { results: [{ success: true, recordCount: 0, start_date: startMonth, end_date: endMonth, skipped: true }], summary: { successCount: 1, failCount: 0, totalRecords: 0 } };
+    }
+
+    let totalRecords = 0;
+    let lastProcessedMonth = null;
+    const errors = [];
+
+    for (const settleMonth of months) {
+      try {
+        const result = await this.fetchAllReceivableReportList(accountId, { settleMonth }, options);
+        const count = result?.total ?? result?.data?.length ?? 0;
+        totalRecords += count;
+        lastProcessedMonth = settleMonth;
+      } catch (err) {
+        const msg = err?.message ?? String(err);
+        errors.push(`${settleMonth}: ${msg}`);
+        console.error(`[receivableReport] accountId=${accountId} settleMonth=${settleMonth} 失败:`, msg);
+      }
+    }
+
+    const lastMonthDate = lastProcessedMonth ? (() => {
+      const [y, m] = lastProcessedMonth.split('-').map(Number);
+      return new Date(y, m, 0, 23, 59, 59, 999); // 该月最后一天
+    })() : null;
+
+    if (lastMonthDate) {
+      await lingXingSyncStateService.upsertSyncState(accountId, taskType, null, {
+        lastEndTimestamp: lastMonthDate,
+        lastSyncAt: new Date(),
+        lastRecordCount: totalRecords,
+        lastStatus: errors.length > 0 ? 'partial' : 'success',
+        lastErrorMessage: errors.length > 0 ? errors.join('; ') : null
+      });
+    }
+
+    const success = errors.length === 0;
+    return {
+      results: [{
+        success,
+        recordCount: totalRecords,
+        start_date: months[0],
+        end_date: months[months.length - 1],
+        error: errors.length > 0 ? errors.join('; ') : undefined
+      }],
+      summary: { successCount: success ? 1 : 0, failCount: success ? 0 : 1, totalRecords }
+    };
+  }
+
+  /**
+   * 应收报告-详情-列表 增量同步：按 settleMonth 逐月、按 (sid, currencyCode) 拉取并分页保存。
+   * 依赖同月已有主报告或详情数据以得到 (sid, currencyCode)；若某月无则先拉取该月主报告再拉详情。
+   */
+  async incrementalSyncReceivableReportDetailList(accountId, options = {}) {
+    const taskType = 'receivableReportDetail';
+    const defaultLookbackMonths = Math.min(Math.max(1, options.defaultLookbackMonths ?? 12), 60);
+    const now = new Date();
+    const endMonth = options.endMonth ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const state = await lingXingSyncStateService.getSyncState(accountId, taskType, null);
+    let startMonth;
+    if (state?.lastEndTimestamp) {
+      const d = new Date(state.lastEndTimestamp);
+      const lastYyyyMm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const [y, m] = lastYyyyMm.split('-').map(Number);
+      const nextM = m === 12 ? 1 : m + 1;
+      const nextY = m === 12 ? y + 1 : y;
+      startMonth = `${nextY}-${String(nextM).padStart(2, '0')}`;
+    } else {
+      const d = new Date(now.getFullYear(), now.getMonth() - defaultLookbackMonths + 1, 1);
+      startMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (startMonth > endMonth) startMonth = endMonth;
+    }
+
+    const months = this._getMonthsBetween(startMonth, endMonth);
+    if (months.length === 0) {
+      return { results: [{ success: true, recordCount: 0, skipped: true }], summary: { successCount: 1, failCount: 0, totalRecords: 0 } };
+    }
+
+    let totalRecords = 0;
+    let lastProcessedMonth = null;
+    const errors = [];
+
+    for (const settleMonth of months) {
+      let keys = await this._getReceivableDetailKeysForMonth(accountId, settleMonth);
+      if (keys.length === 0) {
+        try {
+          await this.fetchAllReceivableReportList(accountId, { settleMonth }, options);
+          keys = await this._getReceivableDetailKeysForMonth(accountId, settleMonth);
+        } catch (e) {
+          errors.push(`${settleMonth}(先拉主报告): ${e?.message ?? e}`);
+          continue;
+        }
+      }
+      for (const { sid, currencyCode } of keys) {
+        try {
+          const result = await this.fetchAllReceivableReportDetailList(accountId, { sid, currencyCode, settleMonth }, options);
+          totalRecords += result?.total ?? result?.data?.length ?? 0;
+        } catch (err) {
+          errors.push(`${settleMonth}/${sid}/${currencyCode}: ${err?.message ?? err}`);
+        }
+      }
+      lastProcessedMonth = settleMonth;
+    }
+
+    const lastMonthDate = lastProcessedMonth ? (() => {
+      const [y, m] = lastProcessedMonth.split('-').map(Number);
+      return new Date(y, m, 0, 23, 59, 59, 999);
+    })() : null;
+    if (lastMonthDate) {
+      await lingXingSyncStateService.upsertSyncState(accountId, taskType, null, {
+        lastEndTimestamp: lastMonthDate,
+        lastSyncAt: new Date(),
+        lastRecordCount: totalRecords,
+        lastStatus: errors.length > 0 ? 'partial' : 'success',
+        lastErrorMessage: errors.length > 0 ? errors.join('; ') : null
+      });
+    }
+
+    const success = errors.length === 0;
+    return {
+      results: [{ success, recordCount: totalRecords, error: errors.length > 0 ? errors.join('; ') : undefined }],
+      summary: { successCount: success ? 1 : 0, failCount: success ? 0 : 1, totalRecords }
+    };
+  }
+
+  /**
+   * 应收报告-详情-基础信息 增量同步：按 settleMonth 逐月、按 (sid, currencyCode) 拉取并保存单条基础信息。
+   */
+  async incrementalSyncReceivableReportDetailInfo(accountId, options = {}) {
+    const taskType = 'receivableReportDetailInfo';
+    const defaultLookbackMonths = Math.min(Math.max(1, options.defaultLookbackMonths ?? 12), 60);
+    const now = new Date();
+    const endMonth = options.endMonth ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const state = await lingXingSyncStateService.getSyncState(accountId, taskType, null);
+    let startMonth;
+    if (state?.lastEndTimestamp) {
+      const d = new Date(state.lastEndTimestamp);
+      const lastYyyyMm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const [y, m] = lastYyyyMm.split('-').map(Number);
+      const nextM = m === 12 ? 1 : m + 1;
+      const nextY = m === 12 ? y + 1 : y;
+      startMonth = `${nextY}-${String(nextM).padStart(2, '0')}`;
+    } else {
+      const d = new Date(now.getFullYear(), now.getMonth() - defaultLookbackMonths + 1, 1);
+      startMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (startMonth > endMonth) startMonth = endMonth;
+    }
+
+    const months = this._getMonthsBetween(startMonth, endMonth);
+    if (months.length === 0) {
+      return { results: [{ success: true, recordCount: 0, skipped: true }], summary: { successCount: 1, failCount: 0, totalRecords: 0 } };
+    }
+
+    let totalRecords = 0;
+    let lastProcessedMonth = null;
+    const errors = [];
+
+    for (const settleMonth of months) {
+      let keys = await this._getReceivableDetailKeysForMonth(accountId, settleMonth);
+      if (keys.length === 0) {
+        try {
+          await this.fetchAllReceivableReportList(accountId, { settleMonth }, options);
+          keys = await this._getReceivableDetailKeysForMonth(accountId, settleMonth);
+        } catch (e) {
+          errors.push(`${settleMonth}(先拉主报告): ${e?.message ?? e}`);
+          continue;
+        }
+      }
+      for (const { sid, currencyCode } of keys) {
+        try {
+          const result = await this.getReceivableReportDetailInfo(accountId, { sid, currencyCode, settleMonth });
+          const info = result?.data;
+          if (info != null) {
+            await this.saveReceivableReportDetailInfo(accountId, sid, currencyCode, settleMonth, info);
+            totalRecords += 1;
+          }
+        } catch (err) {
+          errors.push(`${settleMonth}/${sid}/${currencyCode}: ${err?.message ?? err}`);
+        }
+      }
+      lastProcessedMonth = settleMonth;
+    }
+
+    const lastMonthDate = lastProcessedMonth ? (() => {
+      const [y, m] = lastProcessedMonth.split('-').map(Number);
+      return new Date(y, m, 0, 23, 59, 59, 999);
+    })() : null;
+    if (lastMonthDate) {
+      await lingXingSyncStateService.upsertSyncState(accountId, taskType, null, {
+        lastEndTimestamp: lastMonthDate,
+        lastSyncAt: new Date(),
+        lastRecordCount: totalRecords,
+        lastStatus: errors.length > 0 ? 'partial' : 'success',
+        lastErrorMessage: errors.length > 0 ? errors.join('; ') : null
+      });
+    }
+
+    const success = errors.length === 0;
+    return {
+      results: [{ success, recordCount: totalRecords, error: errors.length > 0 ? errors.join('; ') : undefined }],
+      summary: { successCount: success ? 1 : 0, failCount: success ? 0 : 1, totalRecords }
+    };
+  }
+
+  /**
    * 自动拉取所有应收报告详情列表数据（自动处理分页）
    */
   async fetchAllReceivableReportDetailList(accountId, listParams = {}, options = {}) {
@@ -3614,6 +4895,9 @@ class LingXingFinanceService extends LingXingApiClient {
 
           const pageData = pageResult.data || [];
           const pageTotal = pageResult.total || 0;
+          if (listParams.settleMonth) {
+            pageData.forEach(d => { if (d.settleMonth == null) d.settleMonth = listParams.settleMonth; });
+          }
 
           if (currentPage === 1) {
             totalCount = pageTotal;
@@ -3646,9 +4930,9 @@ class LingXingFinanceService extends LingXingApiClient {
 
       console.log(`所有应收报告详情列表数据获取完成，共 ${allData.length} 条数据`);
 
-      // 保存到数据库
+      // 保存到数据库（传入当前查询的 sid/settleMonth，接口未返回 sid 时用其补全，避免唯一键为 null）
       if (allData && allData.length > 0) {
-        await this.saveReceivableReportDetails(accountId, allData);
+        await this.saveReceivableReportDetails(accountId, allData, { sid: listParams.sid, settleMonth: listParams.settleMonth });
       }
 
       return {
@@ -3661,6 +4945,425 @@ class LingXingFinanceService extends LingXingApiClient {
       };
     } catch (error) {
       console.error('自动拉取所有应收报告详情列表数据失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询利润报表-订单（本接口即将下线，建议使用 transaction 视图）
+   * API: POST /bd/profit/report/open/report/order/list  令牌桶容量: 10
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数
+   *   - offset: 分页偏移量，默认0（可选）
+   *   - length: 分页长度，上限10000（可选）
+   *   - search_date_field: 时间类型，必填。posted_date_locale 结算时间 / fund_transfer_datetime_locale 转账时间 / shipment_datetime_locale 发货时间
+   *   - start_date: 开始时间，必填
+   *   - end_date: 结束时间，必填
+   *   - mids: 站点id数组（可选）
+   *   - sids: 店铺id数组（可选）
+   *   - search_field, search_value, currency_code, account_type, settlement_status, fund_transfer_status, event_source, description（可选）
+   * @returns {Promise<Object>} { data: [], total: 0 }
+   */
+  async getProfitReportOrderList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+      if (!params.search_date_field || !params.start_date || !params.end_date) {
+        throw new Error('search_date_field、start_date、end_date 为必填参数');
+      }
+      const requestParams = {
+        search_date_field: params.search_date_field,
+        start_date: params.start_date,
+        end_date: params.end_date,
+        offset: params.offset !== undefined ? params.offset : 0,
+        length: Math.min(Number(params.length) || 20, 10000)
+      };
+      if (params.mids && Array.isArray(params.mids)) requestParams.mids = params.mids;
+      if (params.sids && Array.isArray(params.sids)) requestParams.sids = params.sids;
+      if (params.search_field) requestParams.search_field = params.search_field;
+      if (params.search_value && Array.isArray(params.search_value)) requestParams.search_value = params.search_value;
+      if (params.currency_code) requestParams.currency_code = params.currency_code;
+      if (params.account_type) requestParams.account_type = params.account_type;
+      if (params.settlement_status && Array.isArray(params.settlement_status)) requestParams.settlement_status = params.settlement_status;
+      if (params.fund_transfer_status && Array.isArray(params.fund_transfer_status)) requestParams.fund_transfer_status = params.fund_transfer_status;
+      if (params.event_source && Array.isArray(params.event_source)) requestParams.event_source = params.event_source;
+      if (params.description && Array.isArray(params.description)) requestParams.description = params.description;
+
+      const response = await this.post(account, '/bd/profit/report/open/report/order/list', requestParams, { successCode: [0, 200, '200'] });
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || response.msg || '获取利润报表-订单列表失败');
+      }
+      const data = response.data || [];
+      const total = response.total ?? data.length;
+      return { data, total };
+    } catch (error) {
+      console.error('获取利润报表-订单列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 保存利润报表-订单到数据库（唯一键：sid + posted_datetime_locale + fid + order_id + event_source + seller_sku/msku）
+   */
+  async saveProfitReportOrders(accountId, orders) {
+    try {
+      if (!prisma.lingXingProfitReportOrder) {
+        console.error('Prisma Client 中未找到 lingXingProfitReportOrder 模型');
+        return;
+      }
+      for (const row of orders) {
+        const sid = row.sid !== undefined && row.sid !== null ? parseInt(row.sid) : 0;
+        const posted = (row.posted_datetime_locale != null ? String(row.posted_datetime_locale) : '').trim();
+        const fid = (row.fid != null ? String(row.fid) : '').trim();
+        const orderId = (row.order_id != null ? String(row.order_id) : '').trim();
+        const eventSource = (row.event_source != null ? String(row.event_source) : '').trim();
+        const sellerSku = (row.msku != null ? String(row.msku) : (row.seller_sku != null ? String(row.seller_sku) : '')).trim();
+        await prisma.lingXingProfitReportOrder.upsert({
+          where: {
+            accountId_sid_posted_fid_order_event_seller: {
+              accountId,
+              sid,
+              postedDatetimeLocale: posted,
+              fid,
+              orderId,
+              eventSource,
+              sellerSku
+            }
+          },
+          update: { data: row, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            sid,
+            postedDatetimeLocale: posted,
+            fid,
+            orderId,
+            eventSource,
+            sellerSku,
+            data: row,
+            archived: false
+          }
+        });
+      }
+      console.log(`利润报表-订单已保存到数据库: 共 ${orders.length} 条`);
+    } catch (error) {
+      console.error('保存利润报表-订单到数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 按天覆盖保存利润报表-订单：先软删除该日订单（按 posted_datetime_locale 匹配日期），再 upsert 新记录（避免唯一键冲突）
+   */
+  async saveProfitReportOrdersForDay(accountId, orders, day) {
+    try {
+      if (!prisma.lingXingProfitReportOrder) return;
+      const dateStr = String(day).trim().slice(0, 10);
+      await prisma.lingXingProfitReportOrder.updateMany({
+        where: {
+          accountId,
+          postedDatetimeLocale: { startsWith: dateStr }
+        },
+        data: { archived: true, updatedAt: new Date() }
+      });
+      for (const row of orders) {
+        const sid = row.sid !== undefined && row.sid !== null ? parseInt(row.sid) : 0;
+        const posted = (row.posted_datetime_locale != null ? String(row.posted_datetime_locale) : '').trim();
+        const fid = (row.fid != null ? String(row.fid) : '').trim();
+        const orderId = (row.order_id != null ? String(row.order_id) : '').trim();
+        const eventSource = (row.event_source != null ? String(row.event_source) : '').trim();
+        const sellerSku = (row.msku != null ? String(row.msku) : (row.seller_sku != null ? String(row.seller_sku) : '')).trim();
+        await prisma.lingXingProfitReportOrder.upsert({
+          where: {
+            accountId_sid_posted_fid_order_event_seller: {
+              accountId,
+              sid,
+              postedDatetimeLocale: posted,
+              fid,
+              orderId,
+              eventSource,
+              sellerSku
+            }
+          },
+          update: { data: row, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            sid,
+            postedDatetimeLocale: posted,
+            fid,
+            orderId,
+            eventSource,
+            sellerSku,
+            data: row,
+            archived: false
+          }
+        });
+      }
+      if (orders.length > 0) console.log(`利润报表-订单已按天覆盖保存: postedDate=${dateStr} 共 ${orders.length} 条`);
+    } catch (error) {
+      console.error('保存利润报表-订单按天失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 自动拉取所有利润报表-订单（分页，length 上限 10000）
+   */
+  async fetchAllProfitReportOrders(accountId, listParams = {}, options = {}) {
+    const { pageSize = 5000, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 10000);
+    try {
+      console.log('开始自动拉取所有利润报表-订单数据...');
+      const allData = [];
+      let offset = 0;
+      let totalCount = 0;
+      let currentPage = 0;
+      let hasMore = true;
+      while (hasMore) {
+        currentPage++;
+        const pageResult = await this.getProfitReportOrderList(accountId, { ...listParams, offset, length: actualPageSize });
+        const pageData = pageResult.data || [];
+        const total = pageResult.total ?? pageData.length;
+        if (currentPage === 1) totalCount = total;
+        allData.push(...pageData);
+        if (onProgress) onProgress(currentPage, totalCount ? Math.ceil(totalCount / actualPageSize) : 1, allData.length, totalCount);
+        if (pageData.length < actualPageSize || (totalCount > 0 && allData.length >= totalCount)) hasMore = false;
+        else {
+          offset += actualPageSize;
+          if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+        }
+      }
+      if (allData.length > 0) await this.saveProfitReportOrders(accountId, allData);
+      console.log(`利润报表-订单拉取完成，共 ${allData.length} 条`);
+      return { data: allData, total: allData.length, stats: { totalRecords: allData.length, pagesFetched: currentPage } };
+    } catch (error) {
+      console.error('自动拉取利润报表-订单失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 按天拉取利润报表-订单：每天 start_date=end_date=day 查全分页后，按天软删再插入主表
+   */
+  async fetchAllProfitReportOrdersByDay(accountId, listParams = {}, options = {}) {
+    const { pageSize = 5000, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 10000);
+    const startDate = listParams.start_date || listParams.startDate;
+    const endDate = listParams.end_date || listParams.endDate;
+    if (!startDate || !endDate) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(startDate, endDate);
+    const searchDateField = listParams.search_date_field || listParams.searchDateField || 'posted_date_locale';
+    const baseParams = { ...listParams, search_date_field: searchDateField };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+    let totalRecords = 0;
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const allRecords = [];
+      let offset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const pageResult = await this.getProfitReportOrderList(accountId, {
+          ...baseParams,
+          start_date: day,
+          end_date: day,
+          offset,
+          length: actualPageSize
+        });
+        const pageData = pageResult.data || [];
+        const total = pageResult.total ?? pageData.length;
+        if (offset === 0) totalCount = total;
+        allRecords.push(...pageData);
+        if (pageData.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+        else {
+          offset += actualPageSize;
+          if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+        }
+      }
+      if (allRecords.length > 0) {
+        await this.saveProfitReportOrdersForDay(accountId, allRecords, day);
+        totalRecords += allRecords.length;
+      }
+      if (onProgress) onProgress(i + 1, days.length, day, totalRecords);
+    }
+    console.log(`利润报表-订单按天拉取完成: ${startDate}~${endDate} 共 ${totalRecords} 条`);
+    return { data: totalRecords, total: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
+  }
+
+  /**
+   * 查询利润报表 - 订单维度 transaction 视图
+   * API: POST /basicOpen/finance/profitReport/order/transcation/list  令牌桶容量: 1
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数（驼峰命名，与接口一致）
+   *   - startDate, endDate: 必填，格式 YYYY-MM-DD
+   *   - offset, length: 分页，length 上限 1000
+   *   - searchDateField: posted_date_locale | fund_transfer_datetime_locale | shipment_datetime_locale | order_datetime_locale | accounting_time
+   *   - mids, sids, currencyCode, searchField, searchValue, sortField, sortType, settlementStatus, fundTransferStatus, accountType, eventSource, fulfillment, orderStatus, gmtModifiedStartDate, gmtModifiedEndDate 等
+   * @returns {Promise<Object>} { records: [], total: 0 }
+   */
+  async getProfitReportOrderTransactionList(accountId, params = {}) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+      if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+      if (!params.startDate || !params.endDate) throw new Error('startDate、endDate 为必填参数');
+
+      const requestParams = {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        offset: params.offset !== undefined ? params.offset : 0,
+        length: Math.min(Number(params.length) || 20, 1000)
+      };
+      if (params.searchDateField) requestParams.searchDateField = params.searchDateField;
+      if (params.mids && Array.isArray(params.mids)) requestParams.mids = params.mids;
+      if (params.sids && Array.isArray(params.sids)) requestParams.sids = params.sids;
+      if (params.currencyCode) requestParams.currencyCode = params.currencyCode;
+      if (params.searchField) requestParams.searchField = params.searchField;
+      if (params.searchValue && Array.isArray(params.searchValue)) requestParams.searchValue = params.searchValue;
+      if (params.sortField) requestParams.sortField = params.sortField;
+      if (params.sortType) requestParams.sortType = params.sortType;
+      if (params.settlementStatus && Array.isArray(params.settlementStatus)) requestParams.settlementStatus = params.settlementStatus;
+      if (params.fundTransferStatus && Array.isArray(params.fundTransferStatus)) requestParams.fundTransferStatus = params.fundTransferStatus;
+      if (params.accountType && Array.isArray(params.accountType)) requestParams.accountType = params.accountType;
+      if (params.eventSource && Array.isArray(params.eventSource)) requestParams.eventSource = params.eventSource;
+      if (params.fulfillment && Array.isArray(params.fulfillment)) requestParams.fulfillment = params.fulfillment;
+      if (params.principalUids && Array.isArray(params.principalUids)) requestParams.principalUids = params.principalUids;
+      if (params.productDeveloperUids && Array.isArray(params.productDeveloperUids)) requestParams.productDeveloperUids = params.productDeveloperUids;
+      if (params.gmtModifiedStartDate) requestParams.gmtModifiedStartDate = params.gmtModifiedStartDate;
+      if (params.gmtModifiedEndDate) requestParams.gmtModifiedEndDate = params.gmtModifiedEndDate;
+      if (params.orderStatus) requestParams.orderStatus = params.orderStatus;
+      if (params.transactionStatus && Array.isArray(params.transactionStatus)) requestParams.transactionStatus = params.transactionStatus;
+
+      const response = await this.post(account, '/basicOpen/finance/profitReport/order/transcation/list', requestParams, { successCode: [0, 200, '200'] });
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || response.msg || '获取利润报表-订单transaction列表失败');
+      }
+      const data = response.data || {};
+      const records = data.records || [];
+      const total = data.total !== undefined ? data.total : (response.total !== undefined ? response.total : records.length);
+      return { records, total };
+    } catch (error) {
+      console.error('获取利润报表-订单transaction列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 按天覆盖保存利润报表-订单 transaction：先删除该 accountId+postedDate 的旧数据，再写入新记录
+   */
+  async saveProfitReportOrderTransactions(accountId, records, postedDate) {
+    try {
+      if (!prisma.lingXingProfitReportOrderTransaction) {
+        console.error('Prisma Client 中未找到 lingXingProfitReportOrderTransaction 模型');
+        return;
+      }
+      const day = String(postedDate).trim().slice(0, 10);
+      await prisma.lingXingProfitReportOrderTransaction.updateMany({
+        where: { accountId, postedDate: day },
+        data: { archived: true, updatedAt: new Date() }
+      });
+      for (const row of records) {
+        const recordId = (row.id != null ? String(row.id) : '').trim();
+        if (!recordId) continue;
+        await prisma.lingXingProfitReportOrderTransaction.upsert({
+          where: {
+            accountId_recordId_profit_tx: { accountId, recordId }
+          },
+          update: {
+            postedDate: day,
+            data: row,
+            archived: false,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId,
+            recordId,
+            postedDate: day,
+            data: row,
+            archived: false
+          }
+        });
+      }
+      if (records.length > 0) {
+        console.log(`利润报表-订单transaction已按天覆盖保存: postedDate=${day} 共 ${records.length} 条`);
+      }
+    } catch (error) {
+      console.error('保存利润报表-订单transaction失败:', error.message);
+    }
+  }
+
+  /**
+   * 将 start_date~end_date 拆分为日期列表（按天）
+   */
+  _getDaysBetween(startDateStr, endDateStr) {
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
+    const days = [];
+    const d = new Date(start);
+    while (d <= end) {
+      days.push(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() + 1);
+    }
+    return days;
+  }
+
+  /**
+   * 自动拉取利润报表-订单 transaction（按天拆分：若区间>1天则按天查询并逐天覆盖保存，默认最早前90天）
+   */
+  async fetchAllProfitReportOrdersTransaction(accountId, listParams = {}, options = {}) {
+    const { pageSize = 1000, delayBetweenPages = 500, onProgress = null, defaultLookbackDays = 90 } = options;
+    const actualPageSize = Math.min(pageSize, 1000);
+    try {
+      const startDate = listParams.start_date || listParams.startDate;
+      const endDate = listParams.end_date || listParams.endDate;
+      if (!startDate || !endDate) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+      const days = this._getDaysBetween(startDate, endDate);
+      const searchDateField = listParams.searchDateField || listParams.search_date_field || 'posted_date_locale';
+      let totalRecords = 0;
+
+      for (let i = 0; i < days.length; i++) {
+        const day = days[i];
+        const dayParams = {
+          ...listParams,
+          startDate: day,
+          endDate: day,
+          searchDateField
+        };
+        const allRecords = [];
+        let offset = 0;
+        let totalCount = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const pageResult = await this.getProfitReportOrderTransactionList(accountId, {
+            ...dayParams,
+            offset,
+            length: actualPageSize
+          });
+          const pageRecords = pageResult.records || [];
+          const total = pageResult.total ?? pageRecords.length;
+          if (offset === 0) totalCount = total;
+          allRecords.push(...pageRecords);
+          if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+          else {
+            offset += actualPageSize;
+            if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+          }
+        }
+        if (allRecords.length > 0) {
+          await this.saveProfitReportOrderTransactions(accountId, allRecords, day);
+          totalRecords += allRecords.length;
+        }
+        if (onProgress) onProgress(i + 1, days.length, day, totalRecords);
+      }
+
+      console.log(`利润报表-订单transaction拉取完成: ${startDate}~${endDate} 共 ${days.length} 天 ${totalRecords} 条`);
+      return { data: totalRecords, total: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
+    } catch (error) {
+      console.error('自动拉取利润报表-订单transaction失败:', error.message);
       throw error;
     }
   }
@@ -3764,6 +5467,34 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
+   * 保存ASIN利润报表到数据库（按天覆盖：先删该日再插入）
+   */
+  async saveAsinProfitReportsForDay(accountId, reports, dataDate) {
+    try {
+      if (!prisma.lingXingAsinProfitReport) return;
+      const day = String(dataDate).trim().slice(0, 10);
+      await prisma.lingXingAsinProfitReport.updateMany({
+        where: { accountId, dataDate: day },
+        data: { archived: true, updatedAt: new Date() }
+      });
+      for (const report of reports) {
+        await prisma.lingXingAsinProfitReport.create({
+          data: {
+            accountId,
+            asin: report.asin || null,
+            dataDate: day,
+            data: report,
+            archived: false
+          }
+        });
+      }
+      if (reports.length > 0) console.log(`ASIN利润报表已按天保存: dataDate=${day} 共 ${reports.length} 条`);
+    } catch (error) {
+      console.error('保存ASIN利润报表到数据库失败:', error.message);
+    }
+  }
+
+  /**
    * 保存ASIN利润报表到数据库
    */
   async saveAsinProfitReports(accountId, reports) {
@@ -3787,6 +5518,34 @@ class LingXingFinanceService extends LingXingApiClient {
       console.log(`ASIN利润报表已保存到数据库: 共 ${reports.length} 条记录`);
     } catch (error) {
       console.error('保存ASIN利润报表到数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 保存父ASIN利润报表到数据库（按天覆盖：先删该日再插入）
+   */
+  async saveParentAsinProfitReportsForDay(accountId, reports, dataDate) {
+    try {
+      if (!prisma.lingXingParentAsinProfitReport) return;
+      const day = String(dataDate).trim().slice(0, 10);
+      await prisma.lingXingParentAsinProfitReport.updateMany({
+        where: { accountId, dataDate: day },
+        data: { archived: true, updatedAt: new Date() }
+      });
+      for (const report of reports) {
+        await prisma.lingXingParentAsinProfitReport.create({
+          data: {
+            accountId,
+            parentAsin: report.parent_asin || null,
+            dataDate: day,
+            data: report,
+            archived: false
+          }
+        });
+      }
+      if (reports.length > 0) console.log(`父ASIN利润报表已按天保存: dataDate=${day} 共 ${reports.length} 条`);
+    } catch (error) {
+      console.error('保存父ASIN利润报表到数据库失败:', error.message);
     }
   }
 
@@ -3845,6 +5604,34 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
+   * 保存店铺利润报表到数据库（按天覆盖：先删该日再插入）
+   */
+  async saveSellerProfitReportsForDay(accountId, reports, dataDate) {
+    try {
+      if (!prisma.lingXingSellerProfitReport) return;
+      const day = String(dataDate).trim().slice(0, 10);
+      await prisma.lingXingSellerProfitReport.updateMany({
+        where: { accountId, dataDate: day },
+        data: { archived: true, updatedAt: new Date() }
+      });
+      for (const report of reports) {
+        await prisma.lingXingSellerProfitReport.create({
+          data: {
+            accountId,
+            sid: report.sid != null ? parseInt(report.sid) : null,
+            dataDate: day,
+            data: report,
+            archived: false
+          }
+        });
+      }
+      if (reports.length > 0) console.log(`店铺利润报表已按天保存: dataDate=${day} 共 ${reports.length} 条`);
+    } catch (error) {
+      console.error('保存店铺利润报表到数据库失败:', error.message);
+    }
+  }
+
+  /**
    * 保存店铺利润报表到数据库
    */
   async saveSellerProfitReports(accountId, reports) {
@@ -3872,7 +5659,7 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
-   * 保存FBA成本流到数据库
+   * 保存FBA成本流到数据库（兼容全量拉取：从 record 取 shop_name/stream_date/unique_key）
    */
   async saveFbaCostStreams(accountId, streams) {
     try {
@@ -3881,10 +5668,27 @@ class LingXingFinanceService extends LingXingApiClient {
         return;
       }
 
+      let idx = 0;
       for (const stream of streams) {
-        await prisma.lingXingFbaCostStream.create({
-          data: {
-            accountId: accountId,
+        const shopName = (stream.shop_name != null && String(stream.shop_name).trim() !== '') ? String(stream.shop_name).trim() : '';
+        const streamDate = (stream.stream_date || stream.action_date || stream.date || '').toString().trim().slice(0, 10);
+        const uniqueKey = (stream.unique_key != null && String(stream.unique_key).trim() !== '') ? String(stream.unique_key).trim() : (stream.business_number != null ? String(stream.business_number) : '') || `gen_${idx}`;
+        idx += 1;
+        await prisma.lingXingFbaCostStream.upsert({
+          where: {
+            fba_cost_stream_account_shop_date_key: {
+              accountId,
+              shopName,
+              streamDate,
+              uniqueKey
+            }
+          },
+          update: { data: stream, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            shopName: shopName || '',
+            streamDate: streamDate || '',
+            uniqueKey: uniqueKey || '',
             data: stream,
             archived: false
           }
@@ -3894,25 +5698,158 @@ class LingXingFinanceService extends LingXingApiClient {
       console.log(`FBA成本流已保存到数据库: 共 ${streams.length} 条记录`);
     } catch (error) {
       console.error('保存FBA成本流到数据库失败:', error.message);
+      throw error;
     }
   }
 
   /**
-   * 保存广告发票到数据库
+   * 按日保存 FBA 成本流水（按 accountId + shopName + streamDate + uniqueKey upsert）
    */
-  async saveAdsInvoices(accountId, invoices) {
+  async saveFbaCostStreamForDay(accountId, shopName, streamDate, records) {
+    if (!prisma.lingXingFbaCostStream || !records.length) return;
+    const day = String(streamDate).trim().slice(0, 10);
+    const shop = (shopName != null && String(shopName).trim() !== '') ? String(shopName).trim() : '';
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const uniqueKey = (row.unique_key != null && String(row.unique_key).trim() !== '') ? String(row.unique_key).trim() : (row.business_number != null ? String(row.business_number) : '') || `row_${i}`;
+      await prisma.lingXingFbaCostStream.upsert({
+        where: {
+          fba_cost_stream_account_shop_date_key: {
+            accountId,
+            shopName: shop,
+            streamDate: day,
+            uniqueKey
+          }
+        },
+        update: { data: row, archived: false, updatedAt: new Date() },
+        create: {
+          accountId,
+          shopName: shop || '',
+          streamDate: day || '',
+          uniqueKey: uniqueKey || '',
+          data: row,
+          archived: false
+        }
+      });
+    }
+  }
+
+  /** FBA 成本流水接口必填的 business_types 默认全量类型（库存动作日期） */
+  static getDefaultFbaCostStreamBusinessTypes() {
+    return [1, 10, 11, 12, 13, 14, 20, 35, 25, 30, 31, 200, 201, 202, 205, 220, 15, 215, 225, 226, 227, 5, 210, 400, 420, 405];
+  }
+
+  /**
+   * 按日拉取 FBA 成本流水：从 DB 遍历 shop_names，每天 start_date=end_date=day 查询并分页，按日保存（不跨月，按天即不跨月）
+   */
+  async fetchAllFbaCostStreamByDay(accountId, listParams = {}, options = {}) {
+    const { pageSize = 200, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 10000);
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(start, end);
+    const shopNames = await this._getShopNamesForAccount(accountId);
+    if (shopNames.length === 0) {
+      console.log(`[fbaCostStream] accountId=${accountId} 无店铺名，跳过`);
+      return { total: 0, data: 0, records: 0, stats: { daysProcessed: 0, totalRecords: 0 } };
+    }
+
+    const businessTypes = listParams.business_types || LingXingFinanceService.getDefaultFbaCostStreamBusinessTypes();
+    const queryType = listParams.query_type || '01';
+    let totalRecords = 0;
+    let done = 0;
+    const totalSteps = shopNames.length * days.length;
+
+    for (const shopName of shopNames) {
+      for (const day of days) {
+        const allRecords = [];
+        let offset = 0;
+        let totalCount = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const res = await this.getFbaCostStream(accountId, {
+            shop_names: [shopName],
+            start_date: day,
+            end_date: day,
+            business_types: businessTypes,
+            query_type: queryType,
+            offset,
+            length: actualPageSize
+          });
+          const pageRecords = res.data || [];
+          const total = res.total ?? 0;
+          if (offset === 0) totalCount = total;
+          allRecords.push(...pageRecords);
+          if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+          else {
+            offset += actualPageSize;
+            if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+          }
+        }
+        if (allRecords.length > 0) {
+          await this.saveFbaCostStreamForDay(accountId, shopName, day, allRecords);
+          totalRecords += allRecords.length;
+        }
+        done++;
+        if (onProgress) onProgress(done, totalSteps, day, totalRecords);
+      }
+    }
+    console.log(`FBA成本流水拉取完成: ${start}~${end} 店铺数=${shopNames.length} 共 ${totalRecords} 条`);
+    return { total: totalRecords, data: totalRecords, records: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
+  }
+  /**
+   * 保存广告发票到数据库（唯一键：sid + invoice_id；可选拉取活动列表与基本信息并写入当前记录）
+   * @param {string} accountId
+   * @param {Array} invoices - 列表项需含 invoice_id 或 id、可选 sid
+   * @param {Object} opts - sid: 本批统一 sid；fetchEnrichment: 是否拉取活动列表+基本信息并写入 data（默认 true）；delayBetweenEnrichment: 每条补充请求间隔 ms
+   */
+  async saveAdsInvoices(accountId, invoices, opts = {}) {
     try {
       if (!prisma.lingXingAdsInvoice) {
         console.error('Prisma Client 中未找到 lingXingAdsInvoice 模型');
         return;
       }
 
-      for (const invoice of invoices) {
-        await prisma.lingXingAdsInvoice.create({
-          data: {
-            accountId: accountId,
-            invoiceId: invoice.invoice_id || invoice.id || null,
-            data: invoice,
+      const sidOverride = opts.sid !== undefined && opts.sid !== null ? parseInt(opts.sid) : null;
+      const fetchEnrichment = opts.fetchEnrichment !== false;
+      const delayBetweenEnrichment = opts.delayBetweenEnrichment ?? 150;
+
+      for (let i = 0; i < invoices.length; i++) {
+        const invoice = invoices[i];
+        const sid = sidOverride !== null ? sidOverride : (invoice.sid !== undefined && invoice.sid !== null ? parseInt(invoice.sid) : 0);
+        const invoiceId = (invoice.invoice_id != null ? String(invoice.invoice_id) : (invoice.id != null ? String(invoice.id) : '')).trim() || '';
+        let dataToSave = { ...invoice };
+
+        if (fetchEnrichment && invoiceId && (sid !== undefined && sid !== null)) {
+          try {
+            const [campaignList, detail] = await Promise.all([
+              this.fetchAllAdsInvoiceCampaignListForInvoice(accountId, { invoice_id: invoiceId, sid }, { delayBetweenPages: delayBetweenEnrichment }),
+              this.getAdsInvoiceDetail(accountId, { invoice_id: invoiceId, sid })
+            ]);
+            dataToSave = { ...invoice, campaignList: campaignList || [], detail: detail || null };
+          } catch (err) {
+            console.warn(`[adsInvoice] 拉取活动/详情失败 sid=${sid} invoice_id=${invoiceId}:`, err?.message || err);
+          }
+          if (delayBetweenEnrichment > 0 && i < invoices.length - 1) {
+            await new Promise(r => setTimeout(r, delayBetweenEnrichment));
+          }
+        }
+
+        await prisma.lingXingAdsInvoice.upsert({
+          where: {
+            accountId_sid_invoiceId: {
+              accountId,
+              sid,
+              invoiceId
+            }
+          },
+          update: { data: dataToSave, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            sid,
+            invoiceId,
+            data: dataToSave,
             archived: false
           }
         });
@@ -3921,7 +5858,61 @@ class LingXingFinanceService extends LingXingApiClient {
       console.log(`广告发票已保存到数据库: 共 ${invoices.length} 条记录`);
     } catch (error) {
       console.error('保存广告发票到数据库失败:', error.message);
+      throw error;
     }
+  }
+
+  /**
+   * 按日期范围拉取广告发票列表：支持多天查询，按 sid 遍历，每个 sid 用 invoice_start_time～invoice_end_time 一次查并分页；
+   * 存储以 sid + invoice_id 为唯一键；保存时拉取广告发票活动列表和基本信息写入当前记录
+   */
+  async fetchAllAdsInvoiceListByDay(accountId, listParams = {}, options = {}) {
+    const { pageSize = 100, delayBetweenPages = 500, onProgress = null, fetchEnrichment = true } = options;
+    const actualPageSize = Math.min(pageSize, 10000);
+    const start = listParams.start_date || listParams.startDate;
+    const end = listParams.end_date || listParams.endDate;
+    if (!start || !end) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const sids = await this._getSidsForAccount(accountId);
+    if (sids.length === 0) {
+      console.log(`[adsInvoice] accountId=${accountId} 无店铺 sid，跳过`);
+      return { total: 0, data: 0, records: 0, stats: { sidsProcessed: 0, totalRecords: 0 } };
+    }
+
+    let totalRecords = 0;
+    let done = 0;
+
+    for (const sid of sids) {
+      const allRecords = [];
+      let offset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const res = await this.getAdsInvoiceList(accountId, {
+          invoice_start_time: start,
+          invoice_end_time: end,
+          sids: [sid],
+          offset,
+          length: actualPageSize
+        });
+        const pageRecords = res.data || [];
+        const total = res.total ?? 0;
+        if (offset === 0) totalCount = total;
+        allRecords.push(...pageRecords);
+        if (pageRecords.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+        else {
+          offset += actualPageSize;
+          if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+        }
+      }
+      if (allRecords.length > 0) {
+        await this.saveAdsInvoices(accountId, allRecords, { sid, fetchEnrichment });
+        totalRecords += allRecords.length;
+      }
+      done++;
+      if (onProgress) onProgress(done, sids.length, totalRecords);
+    }
+    console.log(`广告发票拉取完成: ${start}~${end} sid数=${sids.length} 共 ${totalRecords} 条`);
+    return { total: totalRecords, data: totalRecords, records: totalRecords, stats: { sidsProcessed: sids.length, totalRecords } };
   }
 
   /**
@@ -4234,9 +6225,12 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
-   * 保存应收报告详情到数据库
+   * 保存应收报告详情到数据库（upsert，支持增量重复写入同 (accountId,sid,settleMonth,fid) 覆盖）
+   * @param {string} accountId
+   * @param {Array} details - 详情列表，若接口未返回 sid 则用 context.sid（按 sid 遍历查询时传入）
+   * @param {Object} [context] - 可选，{ sid, settleMonth } 当前查询维度，用于补全记录中缺失的 sid/settleMonth；sid 缺省时用 0 占位以满足唯一键非空
    */
-  async saveReceivableReportDetails(accountId, details) {
+  async saveReceivableReportDetails(accountId, details, context = {}) {
     try {
       if (!prisma.lingXingReceivableReportDetail) {
         console.error('Prisma Client 中未找到 lingXingReceivableReportDetail 模型');
@@ -4246,12 +6240,28 @@ class LingXingFinanceService extends LingXingApiClient {
       for (const detail of details) {
         if (!detail.fid) continue;
 
-        await prisma.lingXingReceivableReportDetail.create({
-          data: {
-            accountId: accountId,
-            sid: detail.sid ? parseInt(detail.sid) : null,
-            settleMonth: detail.settleMonth || null,
-            fid: detail.fid,
+        const sidVal = detail.sid != null ? parseInt(detail.sid) : (context.sid != null ? parseInt(context.sid) : 0);
+        const settleMonthVal = (detail.settleMonth ?? context.settleMonth ?? '').toString().trim() || null;
+
+        await prisma.lingXingReceivableReportDetail.upsert({
+          where: {
+            accountId_sid_settleMonth_fid: {
+              accountId,
+              sid: sidVal,
+              settleMonth: settleMonthVal,
+              fid: String(detail.fid)
+            }
+          },
+          update: {
+            data: detail,
+            archived: false,
+            updatedAt: new Date()
+          },
+          create: {
+            accountId,
+            sid: sidVal,
+            settleMonth: settleMonthVal,
+            fid: String(detail.fid),
             data: detail,
             archived: false
           }
@@ -4284,8 +6294,232 @@ class LingXingFinanceService extends LingXingApiClient {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'requestFundsOrder',
-      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 7, 90), ...options, extraParams: { search_field_time: options.search_field_time } },
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options, extraParams: { search_field_time: options.search_field_time } },
       async (id, params, opts) => this.fetchAllRequestFundsOrders(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 请款池-货款现结 增量同步（按 start_date/end_date，默认回退 90 天） */
+  async incrementalSyncRequestFundsPoolPurchase(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'requestFundsPoolPurchase',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllRequestFundsPoolPurchase(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 请款池-货款月结 增量同步 */
+  async incrementalSyncRequestFundsPoolInbound(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'requestFundsPoolInbound',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllRequestFundsPoolInbound(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 请款池-货款预付款 增量同步 */
+  async incrementalSyncRequestFundsPoolPrepay(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'requestFundsPoolPrepay',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllRequestFundsPoolPrepay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 请款池-物流请款 增量同步 */
+  async incrementalSyncRequestFundsPoolLogistics(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'requestFundsPoolLogistics',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllRequestFundsPoolLogistics(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 请款池-其他应付款 增量同步 */
+  async incrementalSyncRequestFundsPoolCustomFee(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'requestFundsPoolCustomFee',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllRequestFundsPoolCustomFee(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 请款池-其他费用 增量同步 */
+  async incrementalSyncRequestFundsPoolOtherFee(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'requestFundsPoolOtherFee',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllRequestFundsPoolOtherFee(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 结算中心-结算汇总 增量同步（按日保存，dateType 默认 1 结算结束时间，时间间隔最长 90 天） */
+  async incrementalSyncSettlementSummary(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'settlementSummary',
+      {
+        defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90),
+        ...options,
+        extraParams: { dateType: options.dateType !== undefined ? Number(options.dateType) : 1 }
+      },
+      async (id, params, opts) => this.fetchAllSettlementSummaryList(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 结算中心-交易明细 增量同步（sid 从 DB 遍历，按日保存，每段最多 7 天） */
+  async incrementalSyncSettlementTransactionDetail(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'settlementTransactionDetail',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 7, 90), ...options },
+      async (id, params, opts) => this.fetchAllSettlementTransactionDetailList(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 库存分类账 detail 增量同步（sellerId 从 DB 遍历，按日查存） */
+  async incrementalSyncInventoryLedgerDetail(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'inventoryLedgerDetail',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllInventoryLedgerDetailList(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 库存分类账 summary 增量同步（sellerId 从 DB 遍历，按日查存） */
+  async incrementalSyncInventoryLedgerSummary(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'inventoryLedgerSummary',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllInventoryLedgerSummaryList(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 发货结算报告 增量同步（sid+amazonSellerId 从 DB 遍历，timeType=06 更新时间，按日查存） */
+  async incrementalSyncSettlementReport(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'settlementReport',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options, extraParams: { timeType: '06' } },
+      async (id, params, opts) => this.fetchAllSettlementReportList(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** FBA 成本流水 增量同步（shopName 从 DB 遍历，按日查存） */
+  async incrementalSyncFbaCostStream(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'fbaCostStream',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllFbaCostStreamByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /** 广告发票 增量同步（sid 从 DB 遍历，按日查存） */
+  async incrementalSyncAdsInvoice(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'adsInvoice',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      async (id, params, opts) => this.fetchAllAdsInvoiceListByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 利润报表-订单增量同步（按 search_date_field 时间维度，默认 posted_date_locale 结算时间）
+   */
+  async incrementalSyncProfitReportOrders(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'profitReportOrder',
+      {
+        defaultLookbackDays: options.defaultLookbackDays ?? 10,
+        ...options,
+        extraParams: {
+          search_date_field: options.search_date_field || 'posted_date_locale'
+        }
+      },
+      async (id, params, opts) => this.fetchAllProfitReportOrdersByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 利润报表-订单维度 transaction 增量同步（按天拆分、按天覆盖，默认最早前90天）
+   */
+  async incrementalSyncProfitReportOrderTransaction(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'profitReportOrderTransaction',
+      {
+        defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90),
+        ...options,
+        extraParams: {
+          searchDateField: options.searchDateField || 'posted_date_locale'
+        }
+      },
+      async (id, params, opts) => this.fetchAllProfitReportOrdersTransaction(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 利润报表-ASIN 增量同步（按天拆分、按天覆盖，默认回退90天）
+   */
+  async incrementalSyncAsinProfitReport(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'asinProfitReport',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90), ...options },
+      async (id, params, opts) => this.fetchAllAsinProfitReportsByDayRange(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 利润报表-父ASIN 增量同步（按天拆分、按天覆盖，默认回退90天）
+   */
+  async incrementalSyncParentAsinProfitReport(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'parentAsinProfitReport',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90), ...options },
+      async (id, params, opts) => this.fetchAllParentAsinProfitReportsByDayRange(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 利润报表-店铺 增量同步（按天拆分、按天覆盖，默认回退90天）
+   */
+  async incrementalSyncSellerProfitReport(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'sellerProfitReport',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90), ...options },
+      async (id, params, opts) => this.fetchAllSellerProfitReportsByDayRange(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }

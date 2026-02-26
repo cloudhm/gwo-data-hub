@@ -783,9 +783,10 @@ class LingXingVcService extends LingXingApiClient {
 
         // 保存订单明细
         if (order.purchase_order_sku_list && Array.isArray(order.purchase_order_sku_list)) {
-          // 先删除旧的订单明细
-          await prisma.lingXingVcOrderItem.deleteMany({
-            where: { orderId: savedOrder.id }
+          // 先软删除旧的订单明细
+          await prisma.lingXingVcOrderItem.updateMany({
+            where: { orderId: savedOrder.id },
+            data: { archived: true, updatedAt: new Date() }
           });
 
           // 保存新的订单明细
@@ -1360,9 +1361,21 @@ class LingXingVcService extends LingXingApiClient {
 
         // 保存发货单明细
         if (invoice.items && Array.isArray(invoice.items)) {
-          // 先删除旧的发货单明细
-          await prisma.lingXingVcInvoiceItem.deleteMany({
-            where: { invoiceId: savedInvoice.id }
+          // 先软删除旧的发货单明细（及其箱规）
+          const oldItems = await prisma.lingXingVcInvoiceItem.findMany({
+            where: { invoiceId: savedInvoice.id, archived: false },
+            select: { id: true }
+          });
+          const oldItemIds = oldItems.map(i => i.id);
+          if (oldItemIds.length > 0) {
+            await prisma.lingXingVcInvoiceItemDimension.updateMany({
+              where: { invoiceItemId: { in: oldItemIds } },
+              data: { archived: true, updatedAt: new Date() }
+            });
+          }
+          await prisma.lingXingVcInvoiceItem.updateMany({
+            where: { invoiceId: savedInvoice.id },
+            data: { archived: true, updatedAt: new Date() }
           });
 
           // 保存新的发货单明细
@@ -1447,9 +1460,10 @@ class LingXingVcService extends LingXingApiClient {
 
         // 保存物流信息
         if (invoice.invoiceTrackingList && Array.isArray(invoice.invoiceTrackingList)) {
-          // 先删除旧的物流信息
-          await prisma.lingXingVcInvoiceTracking.deleteMany({
-            where: { invoiceId: savedInvoice.id }
+          // 先软删除旧的物流信息
+          await prisma.lingXingVcInvoiceTracking.updateMany({
+            where: { invoiceId: savedInvoice.id },
+            data: { archived: true, updatedAt: new Date() }
           });
 
           // 保存新的物流信息

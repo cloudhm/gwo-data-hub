@@ -30,20 +30,52 @@ const INCREMENTAL_TASK_REGISTRY = {
   amazonFulfilledShipments: { service: lingXingAmazonService, methodName: 'incrementalSyncAmazonFulfilledShipmentsReport', description: 'Amazon Fulfilled Shipments' },
   fbaInventoryEventDetail: { service: lingXingAmazonService, methodName: 'incrementalSyncFbaInventoryEventDetailReport', description: 'FBA库存动销明细' },
   adjustmentList: { service: lingXingAmazonService, methodName: 'incrementalSyncAdjustmentListReport', description: '盘存记录' },
+  reimbursementReport: { service: lingXingAmazonService, methodName: 'incrementalSyncReimbursementReport', description: '亚马逊赔偿报告' },
 
   // 报表
   salesReport: { service: lingXingReportService, methodName: 'incrementalSyncSalesReport', description: '销量报表' },
+  storeSummarySales: { service: lingXingReportService, methodName: 'incrementalSyncStoreSummarySales', description: '店铺汇总销量' },
   productPerformance: { service: lingXingReportService, methodName: 'incrementalSyncProductPerformance', description: '产品表现' },
+  asin360HourData: { service: lingXingReportService, methodName: 'incrementalSyncAsin360HourData', description: 'ASIN360小时数据' },
   mskuProfitStatistics: { service: lingXingReportService, methodName: 'incrementalSyncMskuProfitStatistics', description: '利润统计MSKU' },
+  profitReportOrder: { service: lingXingFinanceService, methodName: 'incrementalSyncProfitReportOrders', description: '利润报表-订单' },
+  profitReportOrderTransaction: { service: lingXingFinanceService, methodName: 'incrementalSyncProfitReportOrderTransaction', description: '利润报表-订单transaction' },
+  asinProfitReport: { service: lingXingFinanceService, methodName: 'incrementalSyncAsinProfitReport', description: '利润报表-ASIN' },
+  parentAsinProfitReport: { service: lingXingFinanceService, methodName: 'incrementalSyncParentAsinProfitReport', description: '利润报表-父ASIN' },
+  sellerProfitReport: { service: lingXingFinanceService, methodName: 'incrementalSyncSellerProfitReport', description: '利润报表-店铺' },
+  returnOrderAnalysis: { service: lingXingReportService, methodName: 'incrementalSyncReturnOrderAnalysis', description: '退货分析' },
 
   // 财务
   feeDetail: { service: lingXingFinanceService, methodName: 'incrementalSyncFeeDetails', description: '费用明细' },
   requestFundsOrder: { service: lingXingFinanceService, methodName: 'incrementalSyncRequestFundsOrders', description: '请款单' },
+  requestFundsPoolPurchase: { service: lingXingFinanceService, methodName: 'incrementalSyncRequestFundsPoolPurchase', description: '请款池-货款现结' },
+  requestFundsPoolInbound: { service: lingXingFinanceService, methodName: 'incrementalSyncRequestFundsPoolInbound', description: '请款池-货款月结' },
+  requestFundsPoolPrepay: { service: lingXingFinanceService, methodName: 'incrementalSyncRequestFundsPoolPrepay', description: '请款池-货款预付款' },
+  requestFundsPoolLogistics: { service: lingXingFinanceService, methodName: 'incrementalSyncRequestFundsPoolLogistics', description: '请款池-物流请款' },
+  requestFundsPoolCustomFee: { service: lingXingFinanceService, methodName: 'incrementalSyncRequestFundsPoolCustomFee', description: '请款池-其他应付款' },
+  requestFundsPoolOtherFee: { service: lingXingFinanceService, methodName: 'incrementalSyncRequestFundsPoolOtherFee', description: '请款池-其他费用' },
+  receivableReport: { service: lingXingFinanceService, methodName: 'incrementalSyncReceivableReport', description: '应收报告(按月)' },
+  receivableReportDetail: { service: lingXingFinanceService, methodName: 'incrementalSyncReceivableReportDetailList', description: '应收报告-详情-列表(按月)' },
+  receivableReportDetailInfo: { service: lingXingFinanceService, methodName: 'incrementalSyncReceivableReportDetailInfo', description: '应收报告-详情-基础信息(按月)' },
+  settlementSummary: { service: lingXingFinanceService, methodName: 'incrementalSyncSettlementSummary', description: '结算中心-结算汇总(按日)' },
+  settlementTransactionDetail: { service: lingXingFinanceService, methodName: 'incrementalSyncSettlementTransactionDetail', description: '结算中心-交易明细(按sid按日)' },
+  inventoryLedgerDetail: { service: lingXingFinanceService, methodName: 'incrementalSyncInventoryLedgerDetail', description: '库存分类账detail(按sellerId按日)' },
+  inventoryLedgerSummary: { service: lingXingFinanceService, methodName: 'incrementalSyncInventoryLedgerSummary', description: '库存分类账summary(按sellerId按日)' },
+  settlementReport: { service: lingXingFinanceService, methodName: 'incrementalSyncSettlementReport', description: '发货结算报告(按sid按日,更新时间)' },
+  fbaCostStream: { service: lingXingFinanceService, methodName: 'incrementalSyncFbaCostStream', description: 'FBA成本流水(按shopName按日)' },
+  adsInvoice: { service: lingXingFinanceService, methodName: 'incrementalSyncAdsInvoice', description: '广告发票(按sid按日)' },
 
   // 仓库
   purchaseReceiptOrder: { service: lingXingWarehouseService, methodName: 'incrementalSyncPurchaseReceiptOrders', description: '收货单' },
   inboundOrder: { service: lingXingWarehouseService, methodName: 'incrementalSyncInboundOrders', description: '入库单' },
   outboundOrder: { service: lingXingWarehouseService, methodName: 'incrementalSyncOutboundOrders', description: '出库单' },
+  storageReportLocalAggregate: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportLocalAggregate', description: '库存报表-本地仓-汇总' },
+  storageReportLocalDetail: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportLocalDetail', description: '库存报表-本地仓-明细' },
+  storageReportOverseasAggregate: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportOverseasAggregate', description: '库存报表-海外仓-汇总' },
+  storageReportOverseasDetail: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportOverseasDetail', description: '库存报表-海外仓-明细' },
+  storageReportFbaGather: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportFbaGather', description: '库存报表-FBA-汇总' },
+  storageReportFbaDetail: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportFbaDetail', description: '库存报表-FBA-明细' },
+  fbaStorageFeeMonth: { service: lingXingReportService, methodName: 'incrementalSyncFbaStorageFeeMonth', description: 'FBA月仓储费' },
 
   // VC
   vcOrder: { service: lingXingVcService, methodName: 'incrementalSyncVcOrders', description: 'VC订单' },
@@ -54,12 +86,18 @@ const INCREMENTAL_TASK_REGISTRY = {
   purchasePlan: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchasePlans', description: '采购计划' },
   purchaseReturnOrder: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseReturnOrders', description: '采购退货单' },
   purchaseChangeOrder: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseChangeOrders', description: '采购变更单' },
+  purchaseReportProduct: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseReportProduct', description: '采购报表-产品' },
+  purchaseReportSupplier: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseReportSupplier', description: '采购报表-供应商' },
+  purchaseReportBuyer: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseReportBuyer', description: '采购报表-采购员' },
 
   // 产品
   localProduct: { service: lingxingProductService, methodName: 'incrementalSyncLocalProducts', description: '本地产品' },
 
   // 销售
-  salesAmazonOrder: { service: lingXingSalesService, methodName: 'incrementalSyncAmazonOrders', description: '销售-亚马逊订单' }
+  salesAmazonOrder: { service: lingXingSalesService, methodName: 'incrementalSyncAmazonOrders', description: '销售-亚马逊订单' },
+
+  // 工具
+  operateLog: { service: lingXingToolsService, methodName: 'incrementalSyncOperateLog', description: '运营日志(新)' }
 };
 
 /**
@@ -104,6 +142,23 @@ const FULL_TASK_REGISTRY = {
   feeTypes: { service: lingXingFinanceService, methodName: 'fetchAllFeeTypes', description: '费用类型' },
   feeDetailsFull: { service: lingXingFinanceService, methodName: 'fetchAllFeeDetails', description: '费用明细(全量)', hasListParams: true },
   requestFundsOrdersFull: { service: lingXingFinanceService, methodName: 'fetchAllRequestFundsOrders', description: '请款单(全量)', hasListParams: true },
+  requestFundsPoolPurchase: { service: lingXingFinanceService, methodName: 'fetchAllRequestFundsPoolPurchase', description: '请款池-货款现结(全量)', hasListParams: true },
+  requestFundsPoolInbound: { service: lingXingFinanceService, methodName: 'fetchAllRequestFundsPoolInbound', description: '请款池-货款月结(全量)', hasListParams: true },
+  requestFundsPoolPrepay: { service: lingXingFinanceService, methodName: 'fetchAllRequestFundsPoolPrepay', description: '请款池-货款预付款(全量)', hasListParams: true },
+  requestFundsPoolLogistics: { service: lingXingFinanceService, methodName: 'fetchAllRequestFundsPoolLogistics', description: '请款池-物流请款(全量)', hasListParams: true },
+  requestFundsPoolCustomFee: { service: lingXingFinanceService, methodName: 'fetchAllRequestFundsPoolCustomFee', description: '请款池-其他应付款(全量)', hasListParams: true },
+  requestFundsPoolOtherFee: { service: lingXingFinanceService, methodName: 'fetchAllRequestFundsPoolOtherFee', description: '请款池-其他费用(全量)', hasListParams: true },
+  receivableReport: { service: lingXingFinanceService, methodName: 'fetchAllReceivableReportList', description: '应收报告(全量)', hasListParams: true },
+  receivableReportDetail: { service: lingXingFinanceService, methodName: 'fetchAllReceivableReportDetailList', description: '应收报告详情(全量)', hasListParams: true },
+  settlementSummaryFull: { service: lingXingFinanceService, methodName: 'fetchAllSettlementSummaryList', description: '结算中心-结算汇总(全量)', hasListParams: true },
+  settlementTransactionDetailFull: { service: lingXingFinanceService, methodName: 'fetchAllSettlementTransactionDetailList', description: '结算中心-交易明细(全量)', hasListParams: true },
+  inventoryLedgerDetailFull: { service: lingXingFinanceService, methodName: 'fetchAllInventoryLedgerDetailList', description: '库存分类账detail(全量)', hasListParams: true },
+  inventoryLedgerSummaryFull: { service: lingXingFinanceService, methodName: 'fetchAllInventoryLedgerSummaryList', description: '库存分类账summary(全量)', hasListParams: true },
+  settlementReportFull: { service: lingXingFinanceService, methodName: 'fetchAllSettlementReportList', description: '发货结算报告(全量)', hasListParams: true },
+  fbaCostStreamFull: { service: lingXingFinanceService, methodName: 'fetchAllFbaCostStreamByDay', description: 'FBA成本流水(全量按日)', hasListParams: true },
+  adsInvoiceFull: { service: lingXingFinanceService, methodName: 'fetchAllAdsInvoiceListByDay', description: '广告发票(全量按日)', hasListParams: true },
+  profitReportOrderFull: { service: lingXingFinanceService, methodName: 'fetchAllProfitReportOrders', description: '利润报表-订单(全量)', hasListParams: true },
+  profitReportOrderTransactionFull: { service: lingXingFinanceService, methodName: 'fetchAllProfitReportOrdersTransaction', description: '利润报表-订单transaction(全量)', hasListParams: true },
   mskuProfitReport: { service: lingXingFinanceService, methodName: 'fetchAllMskuProfitReport', description: 'MSKU利润报表', hasListParams: true },
   sellerProfitReport: { service: lingXingFinanceService, methodName: 'fetchAllSellerProfitReport', description: '卖家利润报表', hasListParams: true },
 
@@ -112,9 +167,18 @@ const FULL_TASK_REGISTRY = {
 
   // 销售
   amazonOrdersFull: { service: lingXingSalesService, methodName: 'fetchAllAmazonOrders', description: '亚马逊订单(全量)', hasListParams: true },
+  listings: { service: lingXingSalesService, methodName: 'fetchAllListings', description: '亚马逊Listing(全量)' },
 
   // 亚马逊报表（全量拉取）
   allOrdersReportFull: { service: lingXingAmazonService, methodName: 'fetchAllOrdersReport', description: '所有订单报表(全量)', hasListParams: true },
+  storeSummarySalesFull: { service: lingXingReportService, methodName: 'fetchAllStoreSummarySalesByDay', description: '店铺汇总销量(全量)', hasListParams: true },
+  reimbursementReportFull: { service: lingXingAmazonService, methodName: 'fetchAllReimbursementReportByDateRange', description: '亚马逊赔偿报告(全量)', hasListParams: true },
+  purchaseReportProductFull: { service: lingXingPurchaseService, methodName: 'fetchAllPurchaseReportProductByDay', description: '采购报表-产品(全量)', hasListParams: true },
+  purchaseReportSupplierFull: { service: lingXingPurchaseService, methodName: 'fetchAllPurchaseReportSupplierByDay', description: '采购报表-供应商(全量)', hasListParams: true },
+  purchaseReportBuyerFull: { service: lingXingPurchaseService, methodName: 'fetchAllPurchaseReportBuyerByDay', description: '采购报表-采购员(全量)', hasListParams: true },
+  returnOrderAnalysisFull: { service: lingXingReportService, methodName: 'fetchAllReturnOrderAnalysisByDay', description: '退货分析(全量)', hasListParams: true },
+  operateLogFull: { service: lingXingToolsService, methodName: 'fetchAllOperateLogByDay', description: '运营日志(全量)', hasListParams: true },
+  fbaStorageFeeMonthFull: { service: lingXingReportService, methodName: 'fetchAllFbaStorageFeeMonthByMonth', description: 'FBA月仓储费(全量)', hasListParams: true },
 
   // 工具
   keywords: { service: lingXingToolsService, methodName: 'fetchAllKeywords', description: '关键词列表', hasListParams: true }
@@ -148,11 +212,38 @@ const FULL_SYNC_ARCHIVE_MAP = {
   feeTypes: [{ model: 'lingXingFeeType', accountField: 'accountId' }],
   feeDetailsFull: [{ model: 'lingXingFeeDetail', accountField: 'accountId' }],
   requestFundsOrdersFull: [{ model: 'lingXingRequestFundsOrder', accountField: 'accountId' }],
+  requestFundsPoolPurchase: [{ model: 'lingXingRequestFundsPoolPurchase', accountField: 'accountId' }],
+  requestFundsPoolInbound: [{ model: 'lingXingRequestFundsPoolInbound', accountField: 'accountId' }],
+  requestFundsPoolPrepay: [{ model: 'lingXingRequestFundsPoolPrepay', accountField: 'accountId' }],
+  requestFundsPoolLogistics: [{ model: 'lingXingRequestFundsPoolLogistics', accountField: 'accountId' }],
+  requestFundsPoolCustomFee: [{ model: 'lingXingRequestFundsPoolCustomFee', accountField: 'accountId' }],
+  requestFundsPoolOtherFee: [{ model: 'lingXingRequestFundsPoolOtherFee', accountField: 'accountId' }],
+  receivableReport: [{ model: 'lingXingReceivableReport', accountField: 'accountId' }],
+  receivableReportDetail: [{ model: 'lingXingReceivableReportDetail', accountField: 'accountId' }],
+  receivableReportDetailInfo: [{ model: 'lingXingReceivableReportDetailInfo', accountField: 'accountId' }],
+  settlementSummaryFull: [{ model: 'lingXingSettlementSummary', accountField: 'accountId' }],
+  settlementTransactionDetailFull: [{ model: 'lingXingSettlementTransactionDetail', accountField: 'accountId' }],
+  inventoryLedgerDetailFull: [{ model: 'lingXingInventoryLedgerDetail', accountField: 'accountId' }],
+  inventoryLedgerSummaryFull: [{ model: 'lingXingInventoryLedgerSummary', accountField: 'accountId' }],
+  settlementReportFull: [{ model: 'lingXingSettlementReport', accountField: 'accountId' }],
+  fbaCostStreamFull: [{ model: 'lingXingFbaCostStream', accountField: 'accountId' }],
+  adsInvoiceFull: [{ model: 'lingXingAdsInvoice', accountField: 'accountId' }],
+  profitReportOrderFull: [{ model: 'lingXingProfitReportOrder', accountField: 'accountId' }],
+  profitReportOrderTransactionFull: [{ model: 'lingXingProfitReportOrderTransaction', accountField: 'accountId' }],
   mskuProfitReport: [{ model: 'lingXingMskuProfitReport', accountField: 'accountId' }],
   sellerProfitReport: [{ model: 'lingXingSellerProfitReport', accountField: 'accountId' }],
   localProductsFull: [{ model: 'lingXingLocalProduct', accountField: 'accountId' }],
   amazonOrdersFull: [{ model: 'lingXingAmazonOrder', accountField: 'accountId' }],
-  allOrdersReportFull: [{ model: 'lingXingAmazonReport', accountField: 'accountId' }]
+  listings: [{ model: 'lingXingAmazonListing', accountField: 'accountId' }],
+  allOrdersReportFull: [{ model: 'lingXingAmazonReport', accountField: 'accountId' }],
+  storeSummarySalesFull: [{ model: 'lingXingStoreSummarySales', accountField: 'accountId' }],
+  reimbursementReportFull: [{ model: 'lingXingReimbursementReport', accountField: 'accountId' }],
+  purchaseReportProductFull: [{ model: 'lingXingPurchaseReportProduct', accountField: 'accountId' }],
+  purchaseReportSupplierFull: [{ model: 'lingXingPurchaseReportSupplier', accountField: 'accountId' }],
+  purchaseReportBuyerFull: [{ model: 'lingXingPurchaseReportBuyer', accountField: 'accountId' }],
+  returnOrderAnalysisFull: [{ model: 'lingXingReturnOrderAnalysis', accountField: 'accountId' }],
+  operateLogFull: [{ model: 'lingXingOperateLog', accountField: 'accountId' }],
+  fbaStorageFeeMonthFull: [{ model: 'lingXingFbaStorageFeeMonth', accountField: 'accountId' }]
 };
 
 /**
