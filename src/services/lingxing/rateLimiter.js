@@ -45,8 +45,18 @@ class RateLimiter {
       '/cost/center/ods/summary/query': 10,
       '/cost/center/api/settlement/report': 3,
       '/erp/sc/data/sales_report/asinDailyLists': 5,
+      '/erp/sc/data/sales_report/sales': 5,
       '/bd/productPerformance/openApi/asinList': 1,
-      '/bd/profit/statistics/open/msku/list': 10
+      '/bd/profit/statistics/open/msku/list': 10,
+      '/basicOpen/openapi/mwsReport/reimbursementList': 1,
+      '/erp/sc/routing/data/order/fbmReturnOrderList': 1,
+      '/erp/sc/data/mws_report/refundOrders': 1,
+      '/basicOpen/report/purchase/product/list': 1,
+      '/basicOpen/report/purchase/supplier/list': 1,
+      '/basicOpen/report/purchase/buyer/list': 1,
+      '/basicOpen/salesAnalysis/returnOrder/analysisLists': 1,
+      '/basicOpen/operateManage/operateLog/list/v2': 1,
+      '/erp/sc/data/fba_report/storageFeeMonth': 1
     };
     
     // 请求超时时间（2分钟）

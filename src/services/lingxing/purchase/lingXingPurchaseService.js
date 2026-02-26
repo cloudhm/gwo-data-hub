@@ -230,6 +230,241 @@ class LingXingPurchaseService extends LingXingApiClient {
   }
 
   /**
+   * 查询采购报表列表 - 产品
+   * API: POST /basicOpen/report/purchase/product/list
+   * 令牌桶容量: 1，时间间隔最长不得超过90天
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - offset, length, start_date, end_date(Y-m-d), time_type(1下单2到货), sids(逗号分隔), search_field, search_value
+   * @returns {Promise<Object>} { data: [], total: 0 }
+   */
+  async getPurchaseReportProductList(accountId, params = {}) {
+    const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+    const requestParams = {};
+    if (params.offset !== undefined) requestParams.offset = parseInt(params.offset);
+    if (params.length !== undefined) requestParams.length = parseInt(params.length);
+    if (params.start_date !== undefined) requestParams.start_date = params.start_date;
+    if (params.end_date !== undefined) requestParams.end_date = params.end_date;
+    if (params.time_type !== undefined) requestParams.time_type = parseInt(params.time_type);
+    if (params.sids !== undefined) requestParams.sids = typeof params.sids === 'number' ? String(params.sids) : params.sids;
+    if (params.search_field !== undefined) requestParams.search_field = params.search_field;
+    if (params.search_value !== undefined) requestParams.search_value = params.search_value;
+    const response = await this.post(account, '/basicOpen/report/purchase/product/list', requestParams, { successCode: [0, 200, '200'] });
+    if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+      throw new Error(response.message || '获取采购报表-产品列表失败');
+    }
+    return { data: response.data || [], total: response.total ?? (response.data || []).length };
+  }
+
+  /**
+   * 查询采购报表列表 - 供应商
+   * API: POST /basicOpen/report/purchase/supplier/list
+   * 令牌桶容量: 1，时间间隔最长不得超过90天
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - offset, length, start_date, end_date(Y-m-d), time_type(1下单2到货), search_field, search_value, product_type([1,2,3])
+   * @returns {Promise<Object>} { data: [], total: 0 }
+   */
+  async getPurchaseReportSupplierList(accountId, params = {}) {
+    const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+    const requestParams = {};
+    if (params.offset !== undefined) requestParams.offset = parseInt(params.offset);
+    if (params.length !== undefined) requestParams.length = parseInt(params.length);
+    if (params.start_date !== undefined) requestParams.start_date = params.start_date;
+    if (params.end_date !== undefined) requestParams.end_date = params.end_date;
+    if (params.time_type !== undefined) requestParams.time_type = parseInt(params.time_type);
+    if (params.search_field !== undefined) requestParams.search_field = params.search_field;
+    if (params.search_value !== undefined) requestParams.search_value = params.search_value;
+    if (params.product_type !== undefined) requestParams.product_type = Array.isArray(params.product_type) ? params.product_type : [params.product_type];
+    const response = await this.post(account, '/basicOpen/report/purchase/supplier/list', requestParams, { successCode: [0, 200, '200'] });
+    if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+      throw new Error(response.message || '获取采购报表-供应商列表失败');
+    }
+    return { data: response.data || [], total: response.total ?? (response.data || []).length };
+  }
+
+  /**
+   * 查询采购报表列表 - 采购员
+   * API: POST /basicOpen/report/purchase/buyer/list
+   * 令牌桶容量: 1，时间间隔最长不得超过90天
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - offset, length, start_date, end_date(Y-m-d), time_type(1下单2到货), product_type([1,2,3])
+   * @returns {Promise<Object>} { data: [], total: 0 }
+   */
+  async getPurchaseReportBuyerList(accountId, params = {}) {
+    const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+    const requestParams = {};
+    if (params.offset !== undefined) requestParams.offset = parseInt(params.offset);
+    if (params.length !== undefined) requestParams.length = parseInt(params.length);
+    if (params.start_date !== undefined) requestParams.start_date = params.start_date;
+    if (params.end_date !== undefined) requestParams.end_date = params.end_date;
+    if (params.time_type !== undefined) requestParams.time_type = parseInt(params.time_type);
+    if (params.product_type !== undefined) requestParams.product_type = Array.isArray(params.product_type) ? params.product_type : [params.product_type];
+    const response = await this.post(account, '/basicOpen/report/purchase/buyer/list', requestParams, { successCode: [0, 200, '200'] });
+    if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+      throw new Error(response.message || '获取采购报表-采购员列表失败');
+    }
+    return { data: response.data || [], total: response.total ?? (response.data || []).length };
+  }
+
+  /**
+   * 按天保存采购报表-产品/供应商/采购员（软删当日主表后插入一条）
+   */
+  async _savePurchaseReportForDay(modelName, accountId, eventDate, records) {
+    const eventDateStr = String(eventDate || '').trim().slice(0, 10);
+    const model = prisma[modelName];
+    if (!model) return;
+    const existing = await model.findMany({
+      where: { accountId, eventDate: eventDateStr, archived: false },
+      select: { id: true }
+    });
+    if (existing.length > 0) {
+      await model.updateMany({
+        where: { id: { in: existing.map(r => r.id) } },
+        data: { archived: true, updatedAt: new Date() }
+      });
+    }
+    await model.create({
+      data: { accountId, eventDate: eventDateStr, data: records || [], archived: false }
+    });
+  }
+
+  /**
+   * 按天拉取采购报表-产品并保存（日期范围内逐日查询，每页最多200）
+   */
+  async fetchAllPurchaseReportProductByDay(accountId, listParams = {}, options = {}) {
+    const { start_date, end_date } = listParams;
+    if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
+    const pageSize = Math.min(options.pageSize ?? 200, 200);
+    const delayBetweenDays = options.delayBetweenDays ?? 200;
+    let sids = options.sids;
+    if (!sids) {
+      const sellers = await prisma.lingXingSeller.findMany({ where: { accountId, status: 1 }, select: { sid: true } });
+      sids = sellers.map(s => s.sid).filter(Boolean).join(',');
+    }
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+    let totalRecords = 0;
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dayStr = currentDate.toISOString().split('T')[0];
+      let offset = 0;
+      let dayData = [];
+      let hasMore = true;
+      while (hasMore) {
+        const { data: pageData } = await this.getPurchaseReportProductList(accountId, {
+          start_date: dayStr, end_date: dayStr, offset, length: pageSize, ...(sids && { sids })
+        });
+        dayData = dayData.concat(pageData || []);
+        hasMore = (pageData?.length || 0) >= pageSize;
+        if (hasMore) offset += pageSize;
+      }
+      await this._savePurchaseReportForDay('lingXingPurchaseReportProduct', accountId, dayStr, dayData);
+      totalRecords += dayData.length;
+      currentDate.setDate(currentDate.getDate() + 1);
+      if (delayBetweenDays > 0) await new Promise(r => setTimeout(r, delayBetweenDays));
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  /**
+   * 按天拉取采购报表-供应商并保存
+   */
+  async fetchAllPurchaseReportSupplierByDay(accountId, listParams = {}, options = {}) {
+    const { start_date, end_date } = listParams;
+    if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
+    const pageSize = Math.min(options.pageSize ?? 200, 200);
+    const delayBetweenDays = options.delayBetweenDays ?? 200;
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+    let totalRecords = 0;
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dayStr = currentDate.toISOString().split('T')[0];
+      let offset = 0;
+      let dayData = [];
+      let hasMore = true;
+      while (hasMore) {
+        const { data: pageData } = await this.getPurchaseReportSupplierList(accountId, {
+          start_date: dayStr, end_date: dayStr, offset, length: pageSize, ...(options.time_type !== undefined && { time_type: options.time_type })
+        });
+        dayData = dayData.concat(pageData || []);
+        hasMore = (pageData?.length || 0) >= pageSize;
+        if (hasMore) offset += pageSize;
+      }
+      await this._savePurchaseReportForDay('lingXingPurchaseReportSupplier', accountId, dayStr, dayData);
+      totalRecords += dayData.length;
+      currentDate.setDate(currentDate.getDate() + 1);
+      if (delayBetweenDays > 0) await new Promise(r => setTimeout(r, delayBetweenDays));
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  /**
+   * 按天拉取采购报表-采购员并保存
+   */
+  async fetchAllPurchaseReportBuyerByDay(accountId, listParams = {}, options = {}) {
+    const { start_date, end_date } = listParams;
+    if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
+    const pageSize = Math.min(options.pageSize ?? 200, 200);
+    const delayBetweenDays = options.delayBetweenDays ?? 200;
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+    let totalRecords = 0;
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dayStr = currentDate.toISOString().split('T')[0];
+      let offset = 0;
+      let dayData = [];
+      let hasMore = true;
+      while (hasMore) {
+        const { data: pageData } = await this.getPurchaseReportBuyerList(accountId, {
+          start_date: dayStr, end_date: dayStr, offset, length: pageSize, ...(options.time_type !== undefined && { time_type: options.time_type }), ...(options.product_type !== undefined && { product_type: options.product_type })
+        });
+        dayData = dayData.concat(pageData || []);
+        hasMore = (pageData?.length || 0) >= pageSize;
+        if (hasMore) offset += pageSize;
+      }
+      await this._savePurchaseReportForDay('lingXingPurchaseReportBuyer', accountId, dayStr, dayData);
+      totalRecords += dayData.length;
+      currentDate.setDate(currentDate.getDate() + 1);
+      if (delayBetweenDays > 0) await new Promise(r => setTimeout(r, delayBetweenDays));
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  async incrementalSyncPurchaseReportProduct(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseReportProduct',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      (id, params, opts) => this.fetchAllPurchaseReportProductByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  async incrementalSyncPurchaseReportSupplier(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseReportSupplier',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      (id, params, opts) => this.fetchAllPurchaseReportSupplierByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  async incrementalSyncPurchaseReportBuyer(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'purchaseReportBuyer',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      (id, params, opts) => this.fetchAllPurchaseReportBuyerByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
    * 保存采购方列表到数据库
    * @param {string} accountId - 领星账户ID
    * @param {Array} purchasers - 采购方列表数据

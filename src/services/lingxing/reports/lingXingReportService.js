@@ -342,115 +342,444 @@ class LingXingReportService extends LingXingApiClient {
   }
 
   /**
-   * 保存销量报表数据到数据库
-   * @param {string} accountId - 领星账户ID
-   * @param {Object} reportParams - 报表参数
-   *   - sid: 店铺ID
-   *   - event_date: 报表日期
-   *   - asin_type: 查询维度
-   *   - type: 类型
-   * @param {Array} reportData - 报表数据数组
+   * 保存销量报表数据到数据库（仅主表：按天软删后插入，完整数据存 data，不写明细表）
    */
   async saveSalesReport(accountId, reportParams, reportData) {
     try {
-      // 检查 Prisma Client 是否包含新模型
-      if (!prisma.lingXingSalesReport || !prisma.lingXingSalesReportItem) {
-        console.error('Prisma Client 中未找到销量报表模型，请重新生成 Prisma Client 并重启服务器');
+      if (!prisma.lingXingSalesReport) {
+        console.error('Prisma Client 中未找到 lingXingSalesReport 模型');
         return;
       }
 
       const { sid, event_date, asin_type, type } = reportParams;
+      const sidVal = sid !== undefined && sid !== null ? parseInt(sid) : 0;
+      const eventDate = String(event_date || '').trim().slice(0, 10);
+      const asinTypeVal = asin_type !== undefined && asin_type !== null ? parseInt(asin_type) : 1;
+      const typeVal = type !== undefined && type !== null ? parseInt(type) : 1;
 
-      // 创建或更新主表记录
-      const report = await prisma.lingXingSalesReport.upsert({
-        where: {
-          sid_eventDate_asinType_type: {
-            sid: sid,
-            eventDate: event_date,
-            asinType: asin_type || 1,
-            type: type || 1
-          }
-        },
-        update: {
+      // 软删除该维度下已有主表（及关联明细，便于历史清理）
+      const existing = await prisma.lingXingSalesReport.findMany({
+        where: { accountId, sid: sidVal, eventDate, asinType: asinTypeVal, type: typeVal, archived: false },
+        select: { id: true }
+      });
+      if (existing.length > 0) {
+        const ids = existing.map(r => r.id);
+        await prisma.lingXingSalesReportItem.updateMany(
+          { where: { reportId: { in: ids } }, data: { archived: true, updatedAt: new Date() } }
+        );
+        await prisma.lingXingSalesReport.updateMany(
+          { where: { id: { in: ids } }, data: { archived: true, updatedAt: new Date() } }
+        );
+      }
+
+      // 插入一条主表，完整数据存 data，不写明细表
+      await prisma.lingXingSalesReport.create({
+        data: {
+          accountId,
+          sid: sidVal,
+          eventDate,
+          asinType: asinTypeVal,
+          type: typeVal,
           totalRecords: reportData.length,
-          archived: false,
-          updatedAt: new Date()
-        },
-        create: {
-          accountId: accountId,
-          sid: sid,
-          eventDate: event_date,
-          asinType: asin_type || 1,
-          type: type || 1,
-          totalRecords: reportData.length,
+          data: reportData,
           archived: false
         }
       });
 
-      console.log(`销量报表主表已保存/更新: sid=${sid}, event_date=${event_date}, asin_type=${asin_type}, type=${type}`);
-
-      // 保存明细数据
-      for (const item of reportData) {
-        const asin = item.asin || null;
-        const sellerSku = item.seller_sku || null;
-
-        // 如果 asin 和 seller_sku 都为空，跳过
-        if (!asin && !sellerSku) {
-          console.warn('报表明细数据缺少 asin 和 seller_sku，跳过保存:', item);
-          continue;
-        }
-
-        // 对于唯一键，如果值为 null，使用空字符串（Prisma 唯一键不支持 null）
-        // 但根据业务逻辑，在同一个报表中，asin 和 seller_sku 至少有一个有值
-        // 为了保持一致性，在存储时也使用空字符串代替 null
-        const asinValue = asin || '';
-        const sellerSkuValue = sellerSku || '';
-        
-        await prisma.lingXingSalesReportItem.upsert({
-          where: {
-            reportId_asin_sellerSku: {
-              reportId: report.id,
-              asin: asinValue,
-              sellerSku: sellerSkuValue
-            }
-          },
-          update: {
-            sid: item.sid !== undefined && item.sid !== null ? parseInt(item.sid) : sid,
-            rDate: item.r_date || event_date,
-            currencyCode: item.currency_code || null,
-            sellerSku: sellerSkuValue, // 使用处理后的值，保持与唯一键一致
-            asin: asinValue, // 使用处理后的值，保持与唯一键一致
-            productName: item.product_name || null,
-            mapValue: item.map_value !== undefined && item.map_value !== null && item.map_value !== '' 
-              ? parseFloat(item.map_value) 
-              : null,
-            data: item, // 保存完整数据
-            archived: false,
-            updatedAt: new Date()
-          },
-          create: {
-            reportId: report.id,
-            sid: item.sid !== undefined && item.sid !== null ? parseInt(item.sid) : sid,
-            rDate: item.r_date || event_date,
-            currencyCode: item.currency_code || null,
-            sellerSku: sellerSkuValue, // 使用处理后的值，保持与唯一键一致
-            asin: asinValue, // 使用处理后的值，保持与唯一键一致
-            productName: item.product_name || null,
-            mapValue: item.map_value !== undefined && item.map_value !== null && item.map_value !== '' 
-              ? parseFloat(item.map_value) 
-              : null,
-            data: item, // 保存完整数据
-            archived: false
-          }
-        });
-      }
-
-      console.log(`销量报表明细已保存: 共 ${reportData.length} 条记录`);
+      console.log(`销量报表主表已保存: sid=${sidVal}, event_date=${eventDate}, asin_type=${asinTypeVal}, type=${typeVal}, 共 ${reportData.length} 条`);
     } catch (error) {
       console.error('保存销量报表到数据库失败:', error.message);
-      console.error('错误详情:', error);
-      // 不抛出错误，因为保存失败不应该影响API调用
+      throw error;
     }
+  }
+
+  /**
+   * 查询店铺汇总销量（按店铺维度查询店铺销量、销售额）
+   * API: POST /erp/sc/data/sales_report/sales
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数
+   *   - sid: 店铺id（必填）
+   *   - start_date: 报表时间，格式：Y-m-d，闭区间（必填）
+   *   - end_date: 报表时间，格式：Y-m-d，闭区间（必填）
+   *   - offset: 分页偏移量，默认0（可选）
+   *   - length: 分页长度，默认1000（可选）
+   * @returns {Promise<Object>} { data: [], total: 0 }
+   */
+  async getStoreSummarySales(accountId, params = {}) {
+    const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+    if (params.sid === undefined || params.sid === null) throw new Error('sid 为必填参数');
+    if (!params.start_date || !params.end_date) throw new Error('start_date 和 end_date 为必填参数');
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(params.start_date) || !dateRegex.test(params.end_date)) {
+      throw new Error('日期格式错误，应为 Y-m-d 格式');
+    }
+    const requestParams = {
+      sid: parseInt(params.sid),
+      start_date: params.start_date,
+      end_date: params.end_date,
+      ...(params.offset !== undefined && { offset: parseInt(params.offset) }),
+      ...(params.length !== undefined && { length: parseInt(params.length) })
+    };
+    const response = await this.post(account, '/erp/sc/data/sales_report/sales', requestParams, {
+      successCode: [0, 200, '200']
+    });
+    if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+      throw new Error(response.message || '获取店铺汇总销量失败');
+    }
+    const data = response.data || [];
+    const total = response.total ?? data.length;
+    return { data, total };
+  }
+
+  /**
+   * 按天保存店铺汇总销量（软删当日该 sid 主表后插入一条，完整数据存 data）
+   */
+  async saveStoreSummarySalesForDay(accountId, sid, eventDate, records) {
+    const sidVal = parseInt(sid);
+    const eventDateStr = String(eventDate || '').trim().slice(0, 10);
+    const existing = await prisma.lingXingStoreSummarySales.findMany({
+      where: { accountId, sid: sidVal, eventDate: eventDateStr, archived: false },
+      select: { id: true }
+    });
+    if (existing.length > 0) {
+      const ids = existing.map(r => r.id);
+      await prisma.lingXingStoreSummarySales.updateMany({
+        where: { id: { in: ids } },
+        data: { archived: true, updatedAt: new Date() }
+      });
+    }
+    await prisma.lingXingStoreSummarySales.create({
+      data: { accountId, sid: sidVal, eventDate: eventDateStr, data: records || [], archived: false }
+    });
+  }
+
+  /**
+   * 按日期范围、按 sid 遍历拉取店铺汇总销量并按天存储（支持增量）
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} listParams - { start_date, end_date } 闭区间 Y-m-d
+   * @param {Object} options - pageSize, delayBetweenDays, delayBetweenShops
+   * @returns {Promise<{ total: number, data?: Array }>}
+   */
+  async fetchAllStoreSummarySalesByDay(accountId, listParams = {}, options = {}) {
+    const { start_date, end_date } = listParams;
+    if (!start_date || !end_date) throw new Error('start_date 和 end_date 为必填');
+    const pageSize = options.pageSize ?? 1000;
+    const delayBetweenDays = options.delayBetweenDays ?? 500;
+    const delayBetweenShops = options.delayBetweenShops ?? 1000;
+
+    let shopList = [];
+    try {
+      const sellers = await lingxingBasicDataService.getSellerLists(accountId, true);
+      shopList = sellers.map(s => ({ sid: s.sid, name: s.name || s.account_name || `店铺${s.sid}` }));
+    } catch (e) {
+      console.error('获取店铺列表失败:', e.message);
+      throw new Error(`获取店铺列表失败: ${e.message}`);
+    }
+    if (shopList.length === 0) return { total: 0, data: [] };
+
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+    if (startDate > endDate) return { total: 0, data: [] };
+
+    let totalRecords = 0;
+    for (let s = 0; s < shopList.length; s++) {
+      const shop = shopList[s];
+      const sid = shop.sid;
+      const currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        let offset = 0;
+        let hasMore = true;
+        const dayData = [];
+        while (hasMore) {
+          const { data: pageData, total: pageTotal } = await this.getStoreSummarySales(accountId, {
+            sid,
+            start_date: dateStr,
+            end_date: dateStr,
+            offset,
+            length: pageSize
+          });
+          dayData.push(...(pageData || []));
+          if ((pageData?.length || 0) < pageSize) hasMore = false;
+          else offset += pageSize;
+        }
+        if (dayData.length > 0) {
+          await this.saveStoreSummarySalesForDay(accountId, sid, dateStr, dayData);
+          totalRecords += dayData.length;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+        if (delayBetweenDays > 0) await new Promise(r => setTimeout(r, delayBetweenDays));
+      }
+      if (s < shopList.length - 1 && delayBetweenShops > 0) {
+        await new Promise(r => setTimeout(r, delayBetweenShops));
+      }
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  /**
+   * 店铺汇总销量增量同步（按日期范围、按 sid 遍历、按天存储）
+   */
+  async incrementalSyncStoreSummarySales(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'storeSummarySales',
+      { defaultLookbackDays: options.defaultLookbackDays ?? 10, ...options },
+      async (id, params, opts) => this.fetchAllStoreSummarySalesByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 查询FBA月仓储费
+   * API: POST /erp/sc/data/fba_report/storageFeeMonth
+   * 令牌桶容量: 1
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - sid (必填), month (Y-m 必填), offset, length
+   * @returns {Promise<Object>} { data: [], total: 0 }
+   */
+  async getFbaStorageFeeMonth(accountId, params = {}) {
+    const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+    if (params.sid === undefined || params.sid === null) throw new Error('sid 为必填参数');
+    if (!params.month) throw new Error('month 为必填参数，格式 Y-m');
+    const requestParams = {
+      sid: parseInt(params.sid),
+      month: String(params.month).trim().slice(0, 7)
+    };
+    if (params.offset !== undefined) requestParams.offset = parseInt(params.offset);
+    if (params.length !== undefined) requestParams.length = parseInt(params.length);
+    const response = await this.post(account, '/erp/sc/data/fba_report/storageFeeMonth', requestParams, { successCode: [0, 200, '200'] });
+    if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+      throw new Error(response.message || '查询FBA月仓储费失败');
+    }
+    const data = response.data || [];
+    const total = response.total ?? data.length;
+    return { data, total };
+  }
+
+  /**
+   * 按 sid + 月份保存FBA月仓储费（软删当月该 sid 后插入一条，完整数据存 data）
+   */
+  async saveFbaStorageFeeMonthForMonth(accountId, sid, month, records) {
+    const sidVal = parseInt(sid);
+    const monthStr = String(month || '').trim().slice(0, 7);
+    const existing = await prisma.lingXingFbaStorageFeeMonth.findMany({
+      where: { accountId, sid: sidVal, month: monthStr, archived: false },
+      select: { id: true }
+    });
+    if (existing.length > 0) {
+      const ids = existing.map(r => r.id);
+      await prisma.lingXingFbaStorageFeeMonth.updateMany({
+        where: { id: { in: ids } },
+        data: { archived: true, updatedAt: new Date() }
+      });
+    }
+    await prisma.lingXingFbaStorageFeeMonth.create({
+      data: { accountId, sid: sidVal, month: monthStr, data: records || [], archived: false }
+    });
+  }
+
+  /**
+   * 按日期范围生成月份列表（Y-m）
+   */
+  _getMonthsFromDateRange(startDate, endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (start > end) return [];
+    const months = [];
+    const current = new Date(start.getFullYear(), start.getMonth(), 1);
+    const endFirst = new Date(end.getFullYear(), end.getMonth(), 1);
+    while (current <= endFirst) {
+      months.push(`${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`);
+      current.setMonth(current.getMonth() + 1);
+    }
+    return months;
+  }
+
+  /**
+   * 按 sid 从 DB 遍历、按月份拉取FBA月仓储费并保存（支持增量）
+   */
+  async fetchAllFbaStorageFeeMonthByMonth(accountId, listParams = {}, options = {}) {
+    const { start_date, end_date } = listParams;
+    if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
+    const pageSize = options.pageSize ?? 1000;
+    const delayBetweenMonths = options.delayBetweenMonths ?? 200;
+    const delayBetweenShops = options.delayBetweenShops ?? 500;
+    const months = this._getMonthsFromDateRange(start_date, end_date);
+    if (months.length === 0) return { total: 0, data: [] };
+    let shopList = [];
+    try {
+      const sellers = await lingxingBasicDataService.getSellerLists(accountId, true);
+      shopList = sellers.map(s => ({ sid: s.sid, name: s.name || s.account_name || `店铺${s.sid}` }));
+    } catch (e) {
+      console.error('获取店铺列表失败:', e.message);
+      throw new Error(`获取店铺列表失败: ${e.message}`);
+    }
+    if (shopList.length === 0) return { total: 0, data: [] };
+    let totalRecords = 0;
+    for (let s = 0; s < shopList.length; s++) {
+      const shop = shopList[s];
+      const sid = shop.sid;
+      for (let m = 0; m < months.length; m++) {
+        const monthStr = months[m];
+        let offset = 0;
+        let hasMore = true;
+        const monthData = [];
+        while (hasMore) {
+          const { data: pageData, total: pageTotal } = await this.getFbaStorageFeeMonth(accountId, {
+            sid,
+            month: monthStr,
+            offset,
+            length: pageSize
+          });
+          monthData.push(...(pageData || []));
+          if ((pageData?.length || 0) < pageSize) hasMore = false;
+          else offset += pageSize;
+        }
+        if (monthData.length > 0) {
+          await this.saveFbaStorageFeeMonthForMonth(accountId, sid, monthStr, monthData);
+          totalRecords += monthData.length;
+        }
+        if (m < months.length - 1 && delayBetweenMonths > 0) await new Promise(r => setTimeout(r, delayBetweenMonths));
+      }
+      if (s < shopList.length - 1 && delayBetweenShops > 0) await new Promise(r => setTimeout(r, delayBetweenShops));
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  /**
+   * FBA月仓储费增量同步（按 sid 从 DB 遍历、按月份查询并保存）
+   */
+  async incrementalSyncFbaStorageFeeMonth(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'fbaStorageFeeMonth',
+      { defaultLookbackDays: options.defaultLookbackDays ?? 90, ...options },
+      async (id, params, opts) => this.fetchAllFbaStorageFeeMonthByMonth(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
+  }
+
+  /**
+   * 统计-查询退货分析
+   * API: POST /basicOpen/salesAnalysis/returnOrder/analysisLists
+   * 令牌桶容量: 1，最多支持366天范围
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - startDate, endDate (yyyy-MM-dd), length, offset; 可选: asinType, dateType, mids, principalUid, searchField, searchValue, sortField, sortType, storeId
+   * @returns {Promise<Object>} { data: { records: [], total }, total }
+   */
+  async getReturnOrderAnalysisLists(accountId, params = {}) {
+    const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+    if (!params.startDate || !params.endDate) throw new Error('startDate、endDate 为必填，格式 yyyy-MM-dd');
+    if (params.offset === undefined || params.length === undefined) throw new Error('offset、length 为必填');
+    const requestParams = {
+      startDate: params.startDate,
+      endDate: params.endDate,
+      offset: parseInt(params.offset),
+      length: parseInt(params.length)
+    };
+    if (params.asinType !== undefined) requestParams.asinType = params.asinType;
+    if (params.dateType !== undefined) requestParams.dateType = params.dateType;
+    if (params.mids !== undefined) requestParams.mids = params.mids;
+    if (params.principalUid !== undefined) requestParams.principalUid = params.principalUid;
+    if (params.searchField !== undefined) requestParams.searchField = params.searchField;
+    if (params.searchValue !== undefined) requestParams.searchValue = params.searchValue;
+    if (params.sortField !== undefined) requestParams.sortField = params.sortField;
+    if (params.sortType !== undefined) requestParams.sortType = params.sortType;
+    if (params.storeId !== undefined) requestParams.storeId = params.storeId;
+    const response = await this.post(account, '/basicOpen/salesAnalysis/returnOrder/analysisLists', requestParams, { successCode: [0, 200, '200'] });
+    if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+      throw new Error(response.message || '查询退货分析失败');
+    }
+    const data = response.data || {};
+    const records = data.records || [];
+    const total = data.total ?? response.total ?? records.length;
+    return { data: { records, total }, total };
+  }
+
+  /**
+   * 按天保存退货分析（软删当日后插入一条，data 存 { records, total }）
+   */
+  async saveReturnOrderAnalysisForDay(accountId, eventDate, payload) {
+    const eventDateStr = String(eventDate || '').trim().slice(0, 10);
+    const existing = await prisma.lingXingReturnOrderAnalysis.findMany({
+      where: { accountId, eventDate: eventDateStr, archived: false },
+      select: { id: true }
+    });
+    if (existing.length > 0) {
+      await prisma.lingXingReturnOrderAnalysis.updateMany({
+        where: { id: { in: existing.map(r => r.id) } },
+        data: { archived: true, updatedAt: new Date() }
+      });
+    }
+    await prisma.lingXingReturnOrderAnalysis.create({
+      data: { accountId, eventDate: eventDateStr, data: payload || {}, archived: false }
+    });
+  }
+
+  /**
+   * 按天拉取退货分析并保存（日期范围内逐日查询、分页合并后保存；storeId 未传时从 DB 店铺列表遍历）
+   */
+  async fetchAllReturnOrderAnalysisByDay(accountId, listParams = {}, options = {}) {
+    const { start_date, end_date } = listParams;
+    if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
+    const pageSize = options.pageSize ?? 20;
+    const delayBetweenDays = options.delayBetweenDays ?? 200;
+    let storeId = options.storeId;
+    if (storeId === undefined || (Array.isArray(storeId) && storeId.length === 0)) {
+      const sellers = await prisma.lingXingSeller.findMany({
+        where: { accountId, status: 1 },
+        select: { sid: true }
+      });
+      storeId = sellers.map(s => s.sid).filter(Boolean);
+    }
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+    if (startDate > endDate) return { total: 0, data: [] };
+    let totalRecords = 0;
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dayStr = currentDate.toISOString().split('T')[0];
+      let offset = 0;
+      let allRecords = [];
+      let hasMore = true;
+      while (hasMore) {
+        const res = await this.getReturnOrderAnalysisLists(accountId, {
+          startDate: dayStr,
+          endDate: dayStr,
+          offset,
+          length: pageSize,
+          ...(Array.isArray(storeId) && storeId.length > 0 && { storeId }),
+          ...(options.asinType !== undefined && { asinType: options.asinType }),
+          ...(options.dateType !== undefined && { dateType: options.dateType })
+        });
+        const records = (res.data && res.data.records) || [];
+        allRecords = allRecords.concat(records);
+        hasMore = records.length >= pageSize;
+        if (hasMore) offset += pageSize;
+      }
+      await this.saveReturnOrderAnalysisForDay(accountId, dayStr, { records: allRecords, total: allRecords.length });
+      totalRecords += allRecords.length;
+      currentDate.setDate(currentDate.getDate() + 1);
+      if (delayBetweenDays > 0) await new Promise(r => setTimeout(r, delayBetweenDays));
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  /**
+   * 退货分析增量同步（按天查询并保存）
+   */
+  async incrementalSyncReturnOrderAnalysis(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'returnOrderAnalysis',
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 366, 366), ...options },
+      (id, params, opts) => this.fetchAllReturnOrderAnalysisByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 
   /**
@@ -1009,11 +1338,11 @@ class LingXingReportService extends LingXingApiClient {
   }
 
   /**
-   * 按天覆盖保存产品表现：先软删除该日该 sid+summary_field 的主表及子表，再插入当日所有分页
+   * 按天覆盖保存产品表现：先软删除该日该 sid+summary_field 的主表及子表，再插入一条主表（完整数据存 data，不写 pages 子表）
    */
   async saveProductPerformanceForDay(accountId, sid, startDate, endDate, summaryField, dayPages) {
     try {
-      if (!prisma.lingXingProductPerformance || !prisma.lingXingProductPerformancePage) return;
+      if (!prisma.lingXingProductPerformance) return;
       const sidString = String(sid).trim();
       const existing = await prisma.lingXingProductPerformance.findMany({
         where: { accountId, sidString, startDate, endDate, summaryField, archived: false },
@@ -1021,36 +1350,35 @@ class LingXingReportService extends LingXingApiClient {
       });
       const ids = existing.map(p => p.id);
       if (ids.length > 0) {
-        await prisma.lingXingProductPerformancePage.updateMany(
-          { where: { performanceId: { in: ids } }, data: { archived: true, updatedAt: new Date() } }
-        );
+        if (prisma.lingXingProductPerformancePage) {
+          await prisma.lingXingProductPerformancePage.updateMany(
+            { where: { performanceId: { in: ids } }, data: { archived: true, updatedAt: new Date() } }
+          );
+        }
         await prisma.lingXingProductPerformance.updateMany(
           { where: { id: { in: ids } }, data: { archived: true, updatedAt: new Date() } }
         );
       }
-      const performance = await prisma.lingXingProductPerformance.create({
-        data: { accountId, sidString, startDate, endDate, summaryField, archived: false }
+      // 合并当日所有分页的 list 为完整数组，存入主表 data，不写 pages
+      const fullList = (dayPages || []).reduce((acc, page) => {
+        const list = page.list || page.data || [];
+        return acc.concat(Array.isArray(list) ? list : []);
+      }, []);
+      await prisma.lingXingProductPerformance.create({
+        data: {
+          accountId,
+          sidString,
+          startDate,
+          endDate,
+          summaryField,
+          data: fullList,
+          archived: false
+        }
       });
-      for (let i = 0; i < dayPages.length; i++) {
-        const page = dayPages[i];
-        const pageNumber = i;
-        const pageOffset = page.offset != null ? page.offset : i * (page.length || 10000);
-        const pageLength = page.length || 10000;
-        await prisma.lingXingProductPerformancePage.create({
-          data: {
-            performanceId: performance.id,
-            pageOffset,
-            pageLength,
-            pageNumber,
-            total: page.total !== undefined ? page.total : null,
-            data: page,
-            archived: false
-          }
-        });
-      }
-      console.log(`产品表现已按天覆盖保存: sid=${sidString} ${startDate} summary_field=${summaryField} 共 ${dayPages.length} 页`);
+      console.log(`产品表现已按天覆盖保存: sid=${sidString} ${startDate} summary_field=${summaryField} 共 ${fullList.length} 条`);
     } catch (error) {
       console.error('按天保存产品表现失败:', error.message);
+      throw error;
     }
   }
 
@@ -1412,7 +1740,7 @@ class LingXingReportService extends LingXingApiClient {
       const overwriteForDay = options.overwriteForDay === true;
 
       if (overwriteForDay) {
-        // 按天覆盖：软删除该日同条件的主表及子表，再插入新主表+子表
+        // 按天覆盖：软删除该日同条件的主表及子表，再插入一条主表（完整数据存 data，不写 items 子表）
         const existingMain = await prisma.lingXingMskuProfitStatistics.findMany({
           where: {
             accountId,
@@ -1435,9 +1763,28 @@ class LingXingReportService extends LingXingApiClient {
             data: { archived: true, updatedAt: new Date() }
           });
         }
+        const records = responseData.records || [];
+        await prisma.lingXingMskuProfitStatistics.create({
+          data: {
+            accountId,
+            sidString,
+            startDate,
+            endDate,
+            currencyCode: currencyCode || null,
+            mids: mids || null,
+            sids: sidArray.length > 0 ? sidArray : null,
+            searchField: searchField || null,
+            searchValue: searchValue || null,
+            totalRecords: responseData.total !== undefined ? responseData.total : records.length,
+            data: records,
+            archived: false
+          }
+        });
+        console.log(`利润统计MSKU已按天覆盖保存: ${startDate}~${endDate} sidString=${sidString} 共 ${records.length} 条`);
+        return;
       }
 
-      // 创建或更新主表记录（记录查询条件）
+      // 非按天覆盖：创建或更新主表记录（记录查询条件）
       let statistics;
       try {
         statistics = await prisma.lingXingMskuProfitStatistics.upsert({
@@ -1647,7 +1994,7 @@ class LingXingReportService extends LingXingApiClient {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'salesReport',
-      { defaultLookbackDays: options.defaultLookbackDays ?? 3, ...options },
+      { defaultLookbackDays: options.defaultLookbackDays ?? 10, ...options },
       async (id, params, opts) => this.getSalesReportByDateRange(id, { ...params, ...opts })
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
@@ -1660,7 +2007,7 @@ class LingXingReportService extends LingXingApiClient {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'productPerformance',
-      options,
+      { defaultLookbackDays: options.defaultLookbackDays ?? 10, ...options },
       async (id, params, opts) => this.fetchAllProductPerformance(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
@@ -1675,7 +2022,7 @@ class LingXingReportService extends LingXingApiClient {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'asin360HourData',
-      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options, extraParams: listParams },
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90), ...options, extraParams: listParams },
       async (id, params, opts) => this.fetchAllAsin360HourData(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
@@ -1688,7 +2035,7 @@ class LingXingReportService extends LingXingApiClient {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'mskuProfitStatistics',
-      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90), ...options },
       async (id, params, opts) => this.fetchMskuProfitStatisticsByDayRange(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };

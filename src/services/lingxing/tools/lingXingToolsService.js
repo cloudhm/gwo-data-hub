@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
  * 领星ERP工具服务
@@ -79,6 +80,123 @@ class LingXingToolsService extends LingXingApiClient {
       console.error('获取关键词列表失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 查询运营日志(新)
+   * API: POST /basicOpen/operateManage/operateLog/list/v2
+   * 令牌桶容量: 1
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - offset, length, start_date, end_date (yyyy-mm-dd), summary_type (必填: asin/parent_asin/msku); 可选: sids(array), mids(array), search_field, search_value(array)
+   * @returns {Promise<Object>} { data: { data: [] }, total }
+   */
+  async getOperateLogListV2(accountId, params = {}) {
+    const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+    if (!params.start_date || !params.end_date) throw new Error('start_date、end_date 为必填，格式 yyyy-mm-dd');
+    if (!params.summary_type) throw new Error('summary_type 为必填，可选: asin, parent_asin, msku');
+    const requestParams = {
+      start_date: params.start_date,
+      end_date: params.end_date,
+      summary_type: params.summary_type
+    };
+    if (params.offset !== undefined) requestParams.offset = Number(params.offset);
+    if (params.length !== undefined) requestParams.length = Number(params.length);
+    if (params.sids !== undefined) requestParams.sids = params.sids;
+    if (params.mids !== undefined) requestParams.mids = params.mids;
+    if (params.search_field !== undefined) requestParams.search_field = params.search_field;
+    if (params.search_value !== undefined) requestParams.search_value = params.search_value;
+    const response = await this.post(account, '/basicOpen/operateManage/operateLog/list/v2', requestParams, { successCode: [0, 200, '200'] });
+    if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+      throw new Error(response.message || '查询运营日志失败');
+    }
+    const inner = response.data && response.data.data ? response.data.data : (response.data || []);
+    const total = response.total ?? (Array.isArray(inner) ? inner.length : 0);
+    return { data: response.data || { data: [] }, total };
+  }
+
+  /**
+   * 按天+summaryType 保存运营日志（软删当日后插入一条）
+   */
+  async saveOperateLogForDay(accountId, eventDate, summaryType, payload) {
+    const eventDateStr = String(eventDate || '').trim().slice(0, 10);
+    const st = String(summaryType || 'msku');
+    const existing = await prisma.lingXingOperateLog.findMany({
+      where: { accountId, eventDate: eventDateStr, summaryType: st, archived: false },
+      select: { id: true }
+    });
+    if (existing.length > 0) {
+      await prisma.lingXingOperateLog.updateMany({
+        where: { id: { in: existing.map(r => r.id) } },
+        data: { archived: true, updatedAt: new Date() }
+      });
+    }
+    await prisma.lingXingOperateLog.create({
+      data: { accountId, eventDate: eventDateStr, summaryType: st, data: payload || {}, archived: false }
+    });
+  }
+
+  /**
+   * 按天+summaryType 拉取运营日志并保存（sids 从 DB 遍历）
+   */
+  async fetchAllOperateLogByDay(accountId, listParams = {}, options = {}) {
+    const { start_date, end_date } = listParams;
+    if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
+    const pageSize = options.pageSize ?? 40;
+    const delayBetweenDays = options.delayBetweenDays ?? 150;
+    const summaryTypes = ['asin', 'parent_asin', 'msku'];
+    let sids = options.sids;
+    if (!sids || (Array.isArray(sids) && sids.length === 0)) {
+      const sellers = await prisma.lingXingSeller.findMany({ where: { accountId, status: 1 }, select: { sid: true } });
+      sids = sellers.map(s => String(s.sid)).filter(Boolean);
+    }
+    if (Array.isArray(sids) && sids.length === 0) sids = undefined;
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+    if (startDate > endDate) return { total: 0, data: [] };
+    let totalRecords = 0;
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dayStr = currentDate.toISOString().split('T')[0];
+      for (const summaryType of summaryTypes) {
+        let offset = 0;
+        let allData = [];
+        let hasMore = true;
+        while (hasMore) {
+          const res = await this.getOperateLogListV2(accountId, {
+            start_date: dayStr,
+            end_date: dayStr,
+            summary_type: summaryType,
+            offset,
+            length: pageSize,
+            ...(sids && { sids })
+          });
+          const inner = (res.data && res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
+          const list = Array.isArray(inner) ? inner : [];
+          allData = allData.concat(list);
+          hasMore = list.length >= pageSize;
+          if (hasMore) offset += pageSize;
+        }
+        await this.saveOperateLogForDay(accountId, dayStr, summaryType, { data: allData });
+        totalRecords += allData.length;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+      if (delayBetweenDays > 0) await new Promise(r => setTimeout(r, delayBetweenDays));
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  /**
+   * 运营日志(新) 增量同步（按天+summaryType 查询并保存，sids 从 DB 遍历）
+   */
+  async incrementalSyncOperateLog(accountId, options = {}) {
+    const result = await runAccountLevelIncrementalSync(
+      accountId,
+      'operateLog',
+      { defaultLookbackDays: options.defaultLookbackDays ?? 30, ...options },
+      (id, params, opts) => this.fetchAllOperateLogByDay(id, params, opts)
+    );
+    return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
 
   /**

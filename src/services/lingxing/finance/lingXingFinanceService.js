@@ -5055,6 +5055,60 @@ class LingXingFinanceService extends LingXingApiClient {
   }
 
   /**
+   * 按天覆盖保存利润报表-订单：先软删除该日订单（按 posted_datetime_locale 匹配日期），再 upsert 新记录（避免唯一键冲突）
+   */
+  async saveProfitReportOrdersForDay(accountId, orders, day) {
+    try {
+      if (!prisma.lingXingProfitReportOrder) return;
+      const dateStr = String(day).trim().slice(0, 10);
+      await prisma.lingXingProfitReportOrder.updateMany({
+        where: {
+          accountId,
+          postedDatetimeLocale: { startsWith: dateStr }
+        },
+        data: { archived: true, updatedAt: new Date() }
+      });
+      for (const row of orders) {
+        const sid = row.sid !== undefined && row.sid !== null ? parseInt(row.sid) : 0;
+        const posted = (row.posted_datetime_locale != null ? String(row.posted_datetime_locale) : '').trim();
+        const fid = (row.fid != null ? String(row.fid) : '').trim();
+        const orderId = (row.order_id != null ? String(row.order_id) : '').trim();
+        const eventSource = (row.event_source != null ? String(row.event_source) : '').trim();
+        const sellerSku = (row.msku != null ? String(row.msku) : (row.seller_sku != null ? String(row.seller_sku) : '')).trim();
+        await prisma.lingXingProfitReportOrder.upsert({
+          where: {
+            accountId_sid_posted_fid_order_event_seller: {
+              accountId,
+              sid,
+              postedDatetimeLocale: posted,
+              fid,
+              orderId,
+              eventSource,
+              sellerSku
+            }
+          },
+          update: { data: row, archived: false, updatedAt: new Date() },
+          create: {
+            accountId,
+            sid,
+            postedDatetimeLocale: posted,
+            fid,
+            orderId,
+            eventSource,
+            sellerSku,
+            data: row,
+            archived: false
+          }
+        });
+      }
+      if (orders.length > 0) console.log(`利润报表-订单已按天覆盖保存: postedDate=${dateStr} 共 ${orders.length} 条`);
+    } catch (error) {
+      console.error('保存利润报表-订单按天失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * 自动拉取所有利润报表-订单（分页，length 上限 10000）
    */
   async fetchAllProfitReportOrders(accountId, listParams = {}, options = {}) {
@@ -5088,6 +5142,57 @@ class LingXingFinanceService extends LingXingApiClient {
       console.error('自动拉取利润报表-订单失败:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * 按天拉取利润报表-订单：每天 start_date=end_date=day 查全分页后，按天软删再插入主表
+   */
+  async fetchAllProfitReportOrdersByDay(accountId, listParams = {}, options = {}) {
+    const { pageSize = 5000, delayBetweenPages = 500, onProgress = null } = options;
+    const actualPageSize = Math.min(pageSize, 10000);
+    const startDate = listParams.start_date || listParams.startDate;
+    const endDate = listParams.end_date || listParams.endDate;
+    if (!startDate || !endDate) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
+    const days = this._getDaysBetween(startDate, endDate);
+    const searchDateField = listParams.search_date_field || listParams.searchDateField || 'posted_date_locale';
+    const baseParams = { ...listParams, search_date_field: searchDateField };
+    delete baseParams.start_date;
+    delete baseParams.end_date;
+    delete baseParams.startDate;
+    delete baseParams.endDate;
+    let totalRecords = 0;
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const allRecords = [];
+      let offset = 0;
+      let totalCount = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const pageResult = await this.getProfitReportOrderList(accountId, {
+          ...baseParams,
+          start_date: day,
+          end_date: day,
+          offset,
+          length: actualPageSize
+        });
+        const pageData = pageResult.data || [];
+        const total = pageResult.total ?? pageData.length;
+        if (offset === 0) totalCount = total;
+        allRecords.push(...pageData);
+        if (pageData.length < actualPageSize || (totalCount > 0 && allRecords.length >= totalCount)) hasMore = false;
+        else {
+          offset += actualPageSize;
+          if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+        }
+      }
+      if (allRecords.length > 0) {
+        await this.saveProfitReportOrdersForDay(accountId, allRecords, day);
+        totalRecords += allRecords.length;
+      }
+      if (onProgress) onProgress(i + 1, days.length, day, totalRecords);
+    }
+    console.log(`利润报表-订单按天拉取完成: ${startDate}~${endDate} 共 ${totalRecords} 条`);
+    return { data: totalRecords, total: totalRecords, stats: { daysProcessed: days.length, totalRecords } };
   }
 
   /**
@@ -6350,13 +6455,13 @@ class LingXingFinanceService extends LingXingApiClient {
       accountId,
       'profitReportOrder',
       {
-        defaultLookbackDays: options.defaultLookbackDays ?? 31,
+        defaultLookbackDays: options.defaultLookbackDays ?? 10,
         ...options,
         extraParams: {
           search_date_field: options.search_date_field || 'posted_date_locale'
         }
       },
-      async (id, params, opts) => this.fetchAllProfitReportOrders(id, params, opts)
+      async (id, params, opts) => this.fetchAllProfitReportOrdersByDay(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
   }
@@ -6369,7 +6474,7 @@ class LingXingFinanceService extends LingXingApiClient {
       accountId,
       'profitReportOrderTransaction',
       {
-        defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90),
+        defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90),
         ...options,
         extraParams: {
           searchDateField: options.searchDateField || 'posted_date_locale'
@@ -6387,7 +6492,7 @@ class LingXingFinanceService extends LingXingApiClient {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'asinProfitReport',
-      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90), ...options },
       async (id, params, opts) => this.fetchAllAsinProfitReportsByDayRange(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
@@ -6400,7 +6505,7 @@ class LingXingFinanceService extends LingXingApiClient {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'parentAsinProfitReport',
-      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90), ...options },
       async (id, params, opts) => this.fetchAllParentAsinProfitReportsByDayRange(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
@@ -6413,7 +6518,7 @@ class LingXingFinanceService extends LingXingApiClient {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'sellerProfitReport',
-      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 90, 90), ...options },
+      { defaultLookbackDays: Math.min(options.defaultLookbackDays ?? 10, 90), ...options },
       async (id, params, opts) => this.fetchAllSellerProfitReportsByDayRange(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };

@@ -174,6 +174,17 @@ model LingXingAccount {
   amazonReports LingXingAmazonReport[]
   // 关联的销量报表（一个账户下可以有多个销量报表）
   salesReports LingXingSalesReport[]
+  // 店铺汇总销量（按 sid + 日期 按天存储）
+  storeSummarySales LingXingStoreSummarySales[]
+  // 亚马逊赔偿报告（按 sid + 日期按天存储）
+  reimbursementReports LingXingReimbursementReport[]
+  // 采购报表-产品/供应商/采购员（按天存储）
+  purchaseReportProducts LingXingPurchaseReportProduct[]
+  purchaseReportSuppliers LingXingPurchaseReportSupplier[]
+  purchaseReportBuyers LingXingPurchaseReportBuyer[]
+  // 退货分析、运营日志（按天存储）
+  returnOrderAnalyses LingXingReturnOrderAnalysis[]
+  operateLogs LingXingOperateLog[]
   // 关联的产品表现数据（一个账户下可以有多个产品表现记录）
   productPerformance LingXingProductPerformance[]
   // 关联的 ASIN360 小时数据（按 sids+日期+维度 存储）
@@ -187,6 +198,8 @@ model LingXingAccount {
   storageReportOverseasDetail LingXingStorageReportOverseasDetail[]
   storageReportFbaGather LingXingStorageReportFbaGather[]
   storageReportFbaDetail LingXingStorageReportFbaDetail[]
+  // FBA月仓储费（按 sid + 月份 Y-m 存储）
+  fbaStorageFeeMonths LingXingFbaStorageFeeMonth[]
   // 关联的增量同步状态（一个账户下可有多个任务类型的同步状态）
   syncStates LingXingSyncState[]
   // 关联的关键词排名数据（工具-关键词排名）
@@ -2709,7 +2722,7 @@ model LingXingAmazonReport {
   @@map("ods_lingxing_amazon_reports")
 }
 
-// 领星ERP销量报表主表（存储报表汇总信息）
+// 领星ERP销量报表主表（存储报表汇总信息；按天完整数据存 data，不写明细表）
 model LingXingSalesReport {
   id            String   @id @default(uuid())
   accountId     String   // 关联的领星账户ID
@@ -2718,12 +2731,13 @@ model LingXingSalesReport {
   asinType      Int      // 查询维度：1=asin, 2=msku
   type          Int      // 类型：1=销售额, 2=销量, 3=订单量
   totalRecords  Int?     // 总记录数
+  data          Json?    // 当日完整数据数组（按天查全分页后写入，不写明细表）
   archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
   account       LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  items         LingXingSalesReportItem[] // 关联的明细数据
+  items         LingXingSalesReportItem[] // 关联的明细数据（增量同步不再写入）
   
   @@unique([sid, eventDate, asinType, type], name: "sid_eventDate_asinType_type")
   @@index([accountId])
@@ -2733,6 +2747,144 @@ model LingXingSalesReport {
   @@index([type])
   @@index([createdAt])
   @@map("ods_lingxing_sales_reports")
+}
+
+// 领星ERP 店铺汇总销量（查询店铺汇总销量接口 /erp/sc/data/sales_report/sales，按 sid + 日期按天存储）
+model LingXingStoreSummarySales {
+  id         String   @id @default(uuid())
+  accountId  String   // 关联的领星账户ID
+  sid        Int      // 店铺ID
+  eventDate  String   // 报表日期，格式：Y-m-d
+  data       Json?    // 当日完整数据数组（r_date, seller_sku, asin, product_name, currency_code, order_items, volume, amount）
+  archived   Boolean  @default(false) // 软删除标记
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  account    LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, sid, eventDate], name: "accountId_sid_eventDate")
+  @@index([accountId])
+  @@index([sid])
+  @@index([eventDate])
+  @@map("ods_lingxing_store_summary_sales")
+}
+
+// 领星ERP 亚马逊赔偿报告（按 sid + 日期按天存储）
+model LingXingReimbursementReport {
+  id         String   @id @default(uuid())
+  accountId  String
+  sid        Int      // 店铺ID
+  eventDate  String   // 批准日期 Y-m-d
+  data       Json?    // 当日完整数据数组
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  account    LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@unique([accountId, sid, eventDate], name: "accountId_sid_eventDate_reimbursement")
+  @@index([accountId])
+  @@index([sid])
+  @@index([eventDate])
+  @@map("ods_lingxing_reimbursement_reports")
+}
+
+// 领星ERP 采购报表-产品（按天存储）
+model LingXingPurchaseReportProduct {
+  id         String   @id @default(uuid())
+  accountId  String
+  eventDate  String   // Y-m-d
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  account    LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@unique([accountId, eventDate], name: "accountId_eventDate_purchase_product")
+  @@index([accountId])
+  @@index([eventDate])
+  @@map("ods_lingxing_purchase_report_products")
+}
+
+// 领星ERP 采购报表-供应商（按天存储）
+model LingXingPurchaseReportSupplier {
+  id         String   @id @default(uuid())
+  accountId  String
+  eventDate  String   // Y-m-d
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  account    LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@unique([accountId, eventDate], name: "accountId_eventDate_purchase_supplier")
+  @@index([accountId])
+  @@index([eventDate])
+  @@map("ods_lingxing_purchase_report_suppliers")
+}
+
+// 领星ERP 采购报表-采购员（按天存储）
+model LingXingPurchaseReportBuyer {
+  id         String   @id @default(uuid())
+  accountId  String
+  eventDate  String   // Y-m-d
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  account    LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@unique([accountId, eventDate], name: "accountId_eventDate_purchase_buyer")
+  @@index([accountId])
+  @@index([eventDate])
+  @@map("ods_lingxing_purchase_report_buyers")
+}
+
+// 领星ERP 退货分析（按天存储）
+model LingXingReturnOrderAnalysis {
+  id         String   @id @default(uuid())
+  accountId  String
+  eventDate  String   // yyyy-MM-dd
+  data       Json?    // data.records + total
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  account    LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@unique([accountId, eventDate], name: "accountId_eventDate_return_analysis")
+  @@index([accountId])
+  @@index([eventDate])
+  @@map("ods_lingxing_return_order_analyses")
+}
+
+// 领星ERP 运营日志(新)（按天+summaryType 存储）
+model LingXingOperateLog {
+  id           String   @id @default(uuid())
+  accountId    String
+  eventDate    String   // yyyy-mm-dd
+  summaryType  String   // asin | parent_asin | msku
+  data         Json?
+  archived     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  account      LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@unique([accountId, eventDate, summaryType], name: "accountId_eventDate_summaryType_operate")
+  @@index([accountId])
+  @@index([eventDate])
+  @@index([summaryType])
+  @@map("ods_lingxing_operate_logs")
+}
+
+// 领星ERP FBA月仓储费（按 sid + 月份 Y-m 存储）
+model LingXingFbaStorageFeeMonth {
+  id         String   @id @default(uuid())
+  accountId  String
+  sid        Int      // 店铺ID
+  month      String   // 收费月份 Y-m
+  data       Json?    // 当日完整数据数组
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  account    LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@unique([accountId, sid, month], name: "accountId_sid_month_fba_storage_fee")
+  @@index([accountId])
+  @@index([sid])
+  @@index([month])
+  @@map("ods_lingxing_fba_storage_fee_month")
 }
 
 // 领星ERP销量报表明细表（存储每条报表数据）
@@ -2766,7 +2918,7 @@ model LingXingSalesReportItem {
   @@map("ods_lingxing_sales_report_items")
 }
 
-// 领星ERP产品表现主表（记录每次查询条件）
+// 领星ERP产品表现主表（记录每次查询条件；按天完整数据存 data，不写分页子表）
 model LingXingProductPerformance {
   id                String   @id @default(uuid())
   accountId         String   // 关联的领星账户ID
@@ -2774,12 +2926,13 @@ model LingXingProductPerformance {
   startDate         String   // 开始日期，格式：YYYY-MM-DD
   endDate           String   // 结束日期，格式：YYYY-MM-DD
   summaryField      String   // 汇总行维度：asin/parent_asin/msku/sku
+  data              Json?    // 当日完整数据（按天查全分页后合并写入，不写 pages 子表）
   archived      Boolean  @default(false) // 软删除标记
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
   account           LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  pages             LingXingProductPerformancePage[] // 关联的分页数据
+  pages             LingXingProductPerformancePage[] // 关联的分页数据（增量同步不再写入）
   
   // 唯一键：accountId + sidString + startDate + endDate + summaryField
   @@unique([accountId, sidString, startDate, endDate, summaryField], name: "accountId_sidString_startDate_endDate_summaryField")
@@ -2842,7 +2995,7 @@ model LingXingAsin360HourData {
   @@map("ods_lingxing_asin360_hour_data")
 }
 
-// 领星ERP利润统计MSKU主表（存储查询参数）
+// 领星ERP利润统计MSKU主表（存储查询参数；按天完整数据存 data，不写明细表）
 model LingXingMskuProfitStatistics {
   id            String   @id @default(uuid())
   accountId     String   // 关联的领星账户ID
@@ -2855,12 +3008,13 @@ model LingXingMskuProfitStatistics {
   searchField   String?  // 搜索值类型：msku
   searchValue   Json?    // 搜索值数组
   totalRecords  Int?     // 总记录数
+  data          Json?    // 当日完整 records 数组（按天查全分页后写入，不写 items 子表）
   archived      Boolean  @default(false) // 软删除标记
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
   account       LingXingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  items         LingXingMskuProfitStatisticsItem[] // 关联的明细数据
+  items         LingXingMskuProfitStatisticsItem[] // 关联的明细数据（增量同步不再写入）
   
   // 唯一键：accountId + sidString + startDate + endDate + currencyCode
   @@unique([accountId, sidString, startDate, endDate, currencyCode], name: "accountId_sidString_startDate_endDate_currencyCode")

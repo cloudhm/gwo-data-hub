@@ -1188,6 +1188,141 @@ class LingXingAmazonService extends LingXingApiClient {
   }
 
   /**
+   * 查询亚马逊赔偿报告列表
+   * API: POST /basicOpen/openapi/mwsReport/reimbursementList
+   * 令牌桶容量: 1
+   * @param {string} accountId - 领星账户ID
+   * @param {Object} params - 查询参数
+   *   - offset: 分页偏移量，默认0（可选）
+   *   - length: 分页长度，默认20，上限200（可选）
+   *   - search_field: 搜索字段（可选）：reimbursement_id, amazon_order_id, asin, msku, fnsku, item_name
+   *   - search_value: 搜索值（可选）
+   *   - sids: 店铺id，多个英文逗号分隔（可选）
+   *   - start_date: 批准日期开始，闭区间 Y-m-d，间隔最长90天（可选）
+   *   - end_date: 批准日期结束，闭区间 Y-m-d，间隔最长90天（可选）
+   * @returns {Promise<Object>} { data: [], total: 0 }
+   */
+  async getReimbursementList(accountId, params = {}) {
+    const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error(`领星账户不存在: ${accountId}`);
+    const requestParams = {};
+    if (params.offset !== undefined) requestParams.offset = parseInt(params.offset);
+    if (params.length !== undefined) requestParams.length = parseInt(params.length);
+    if (params.search_field !== undefined) requestParams.search_field = params.search_field;
+    if (params.search_value !== undefined) requestParams.search_value = params.search_value;
+    if (params.sids !== undefined) requestParams.sids = typeof params.sids === 'number' ? String(params.sids) : params.sids;
+    if (params.start_date !== undefined) requestParams.start_date = params.start_date;
+    if (params.end_date !== undefined) requestParams.end_date = params.end_date;
+    const response = await this.post(account, '/basicOpen/openapi/mwsReport/reimbursementList', requestParams, {
+      successCode: [0, 200, '200']
+    });
+    if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+      throw new Error(response.message || '获取亚马逊赔偿报告列表失败');
+    }
+    const data = response.data || [];
+    const total = response.total ?? data.length;
+    return { data, total };
+  }
+
+  /**
+   * 按天保存亚马逊赔偿报告（软删当日该 sid 后插入一条，完整数据存 data）
+   */
+  async saveReimbursementReportForDay(accountId, sid, eventDate, records) {
+    const sidVal = parseInt(sid);
+    const eventDateStr = String(eventDate || '').trim().slice(0, 10);
+    const existing = await prisma.lingXingReimbursementReport.findMany({
+      where: { accountId, sid: sidVal, eventDate: eventDateStr, archived: false },
+      select: { id: true }
+    });
+    if (existing.length > 0) {
+      const ids = existing.map(r => r.id);
+      await prisma.lingXingReimbursementReport.updateMany({
+        where: { id: { in: ids } },
+        data: { archived: true, updatedAt: new Date() }
+      });
+    }
+    await prisma.lingXingReimbursementReport.create({
+      data: { accountId, sid: sidVal, eventDate: eventDateStr, data: records || [], archived: false }
+    });
+  }
+
+  /**
+   * 按 sid + 日期范围按天拉取赔偿报告并保存（支持增量，由 _incrementalSyncReportBySid 调用）
+   */
+  async fetchAllReimbursementReport(accountId, filterParams = {}, options = {}) {
+    const { sid, start_date, end_date } = filterParams;
+    if (!sid || !start_date || !end_date) throw new Error('sid、start_date、end_date 为必填');
+    const pageSize = Math.min(options.pageSize ?? 200, 200);
+    const delayBetweenPages = options.delayBetweenPages ?? 300;
+    const delayBetweenDays = options.delayBetweenDays ?? 200;
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+    if (startDate > endDate) return { total: 0, data: [] };
+    let totalRecords = 0;
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dayStr = currentDate.toISOString().split('T')[0];
+      let offset = 0;
+      let hasMore = true;
+      const dayData = [];
+      while (hasMore) {
+        const { data: pageData, total: pageTotal } = await this.getReimbursementList(accountId, {
+          sids: String(sid),
+          start_date: dayStr,
+          end_date: dayStr,
+          offset,
+          length: pageSize
+        });
+        dayData.push(...(pageData || []));
+        if ((pageData?.length || 0) < pageSize) hasMore = false;
+        else offset += pageSize;
+        if (delayBetweenPages > 0) await new Promise(r => setTimeout(r, delayBetweenPages));
+      }
+      if (dayData.length > 0) {
+        await this.saveReimbursementReportForDay(accountId, sid, dayStr, dayData);
+        totalRecords += dayData.length;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+      if (delayBetweenDays > 0) await new Promise(r => setTimeout(r, delayBetweenDays));
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  /**
+   * 亚马逊赔偿报告增量同步（按 sid 从 DB 遍历，按天查询并保存）
+   */
+  async incrementalSyncReimbursementReport(accountId, options = {}) {
+    return this._incrementalSyncReportBySid(
+      accountId,
+      'reimbursementReport',
+      (id, params, opts) => this.fetchAllReimbursementReport(id, params, { ...opts, pageSize: 200 }),
+      { defaultLookbackDays: options.defaultLookbackDays ?? 90, ...options }
+    );
+  }
+
+  /**
+   * 按日期范围全量拉取赔偿报告（遍历 DB 中所有 sid，按天保存；供全量任务调用）
+   */
+  async fetchAllReimbursementReportByDateRange(accountId, listParams = {}, options = {}) {
+    const { start_date, end_date } = listParams;
+    if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
+    const sellers = await prisma.lingXingSeller.findMany({
+      where: { accountId, status: 1 },
+      select: { sid: true }
+    });
+    const sids = sellers.map(s => s.sid).filter(Boolean);
+    if (sids.length === 0) return { total: 0, data: [] };
+    let totalRecords = 0;
+    const delayBetweenShops = options.delayBetweenShops ?? 500;
+    for (let i = 0; i < sids.length; i++) {
+      const res = await this.fetchAllReimbursementReport(accountId, { sid: sids[i], start_date, end_date }, options);
+      totalRecords += res.total || 0;
+      if (i < sids.length - 1 && delayBetweenShops > 0) await new Promise(r => setTimeout(r, delayBetweenShops));
+    }
+    return { total: totalRecords, data: [] };
+  }
+
+  /**
    * 自动拉取所有订单数据（自动处理分页）
    * @param {string} accountId - 领星账户ID
    * @param {Object} filterParams - 筛选参数（必填参数：sid, start_date, end_date）

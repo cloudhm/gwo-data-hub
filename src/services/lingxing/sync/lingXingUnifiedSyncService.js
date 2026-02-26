@@ -30,9 +30,11 @@ const INCREMENTAL_TASK_REGISTRY = {
   amazonFulfilledShipments: { service: lingXingAmazonService, methodName: 'incrementalSyncAmazonFulfilledShipmentsReport', description: 'Amazon Fulfilled Shipments' },
   fbaInventoryEventDetail: { service: lingXingAmazonService, methodName: 'incrementalSyncFbaInventoryEventDetailReport', description: 'FBA库存动销明细' },
   adjustmentList: { service: lingXingAmazonService, methodName: 'incrementalSyncAdjustmentListReport', description: '盘存记录' },
+  reimbursementReport: { service: lingXingAmazonService, methodName: 'incrementalSyncReimbursementReport', description: '亚马逊赔偿报告' },
 
   // 报表
   salesReport: { service: lingXingReportService, methodName: 'incrementalSyncSalesReport', description: '销量报表' },
+  storeSummarySales: { service: lingXingReportService, methodName: 'incrementalSyncStoreSummarySales', description: '店铺汇总销量' },
   productPerformance: { service: lingXingReportService, methodName: 'incrementalSyncProductPerformance', description: '产品表现' },
   asin360HourData: { service: lingXingReportService, methodName: 'incrementalSyncAsin360HourData', description: 'ASIN360小时数据' },
   mskuProfitStatistics: { service: lingXingReportService, methodName: 'incrementalSyncMskuProfitStatistics', description: '利润统计MSKU' },
@@ -41,6 +43,7 @@ const INCREMENTAL_TASK_REGISTRY = {
   asinProfitReport: { service: lingXingFinanceService, methodName: 'incrementalSyncAsinProfitReport', description: '利润报表-ASIN' },
   parentAsinProfitReport: { service: lingXingFinanceService, methodName: 'incrementalSyncParentAsinProfitReport', description: '利润报表-父ASIN' },
   sellerProfitReport: { service: lingXingFinanceService, methodName: 'incrementalSyncSellerProfitReport', description: '利润报表-店铺' },
+  returnOrderAnalysis: { service: lingXingReportService, methodName: 'incrementalSyncReturnOrderAnalysis', description: '退货分析' },
 
   // 财务
   feeDetail: { service: lingXingFinanceService, methodName: 'incrementalSyncFeeDetails', description: '费用明细' },
@@ -72,6 +75,7 @@ const INCREMENTAL_TASK_REGISTRY = {
   storageReportOverseasDetail: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportOverseasDetail', description: '库存报表-海外仓-明细' },
   storageReportFbaGather: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportFbaGather', description: '库存报表-FBA-汇总' },
   storageReportFbaDetail: { service: lingXingReportService, methodName: 'incrementalSyncStorageReportFbaDetail', description: '库存报表-FBA-明细' },
+  fbaStorageFeeMonth: { service: lingXingReportService, methodName: 'incrementalSyncFbaStorageFeeMonth', description: 'FBA月仓储费' },
 
   // VC
   vcOrder: { service: lingXingVcService, methodName: 'incrementalSyncVcOrders', description: 'VC订单' },
@@ -82,12 +86,18 @@ const INCREMENTAL_TASK_REGISTRY = {
   purchasePlan: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchasePlans', description: '采购计划' },
   purchaseReturnOrder: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseReturnOrders', description: '采购退货单' },
   purchaseChangeOrder: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseChangeOrders', description: '采购变更单' },
+  purchaseReportProduct: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseReportProduct', description: '采购报表-产品' },
+  purchaseReportSupplier: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseReportSupplier', description: '采购报表-供应商' },
+  purchaseReportBuyer: { service: lingXingPurchaseService, methodName: 'incrementalSyncPurchaseReportBuyer', description: '采购报表-采购员' },
 
   // 产品
   localProduct: { service: lingxingProductService, methodName: 'incrementalSyncLocalProducts', description: '本地产品' },
 
   // 销售
-  salesAmazonOrder: { service: lingXingSalesService, methodName: 'incrementalSyncAmazonOrders', description: '销售-亚马逊订单' }
+  salesAmazonOrder: { service: lingXingSalesService, methodName: 'incrementalSyncAmazonOrders', description: '销售-亚马逊订单' },
+
+  // 工具
+  operateLog: { service: lingXingToolsService, methodName: 'incrementalSyncOperateLog', description: '运营日志(新)' }
 };
 
 /**
@@ -161,6 +171,14 @@ const FULL_TASK_REGISTRY = {
 
   // 亚马逊报表（全量拉取）
   allOrdersReportFull: { service: lingXingAmazonService, methodName: 'fetchAllOrdersReport', description: '所有订单报表(全量)', hasListParams: true },
+  storeSummarySalesFull: { service: lingXingReportService, methodName: 'fetchAllStoreSummarySalesByDay', description: '店铺汇总销量(全量)', hasListParams: true },
+  reimbursementReportFull: { service: lingXingAmazonService, methodName: 'fetchAllReimbursementReportByDateRange', description: '亚马逊赔偿报告(全量)', hasListParams: true },
+  purchaseReportProductFull: { service: lingXingPurchaseService, methodName: 'fetchAllPurchaseReportProductByDay', description: '采购报表-产品(全量)', hasListParams: true },
+  purchaseReportSupplierFull: { service: lingXingPurchaseService, methodName: 'fetchAllPurchaseReportSupplierByDay', description: '采购报表-供应商(全量)', hasListParams: true },
+  purchaseReportBuyerFull: { service: lingXingPurchaseService, methodName: 'fetchAllPurchaseReportBuyerByDay', description: '采购报表-采购员(全量)', hasListParams: true },
+  returnOrderAnalysisFull: { service: lingXingReportService, methodName: 'fetchAllReturnOrderAnalysisByDay', description: '退货分析(全量)', hasListParams: true },
+  operateLogFull: { service: lingXingToolsService, methodName: 'fetchAllOperateLogByDay', description: '运营日志(全量)', hasListParams: true },
+  fbaStorageFeeMonthFull: { service: lingXingReportService, methodName: 'fetchAllFbaStorageFeeMonthByMonth', description: 'FBA月仓储费(全量)', hasListParams: true },
 
   // 工具
   keywords: { service: lingXingToolsService, methodName: 'fetchAllKeywords', description: '关键词列表', hasListParams: true }
@@ -217,7 +235,15 @@ const FULL_SYNC_ARCHIVE_MAP = {
   localProductsFull: [{ model: 'lingXingLocalProduct', accountField: 'accountId' }],
   amazonOrdersFull: [{ model: 'lingXingAmazonOrder', accountField: 'accountId' }],
   listings: [{ model: 'lingXingAmazonListing', accountField: 'accountId' }],
-  allOrdersReportFull: [{ model: 'lingXingAmazonReport', accountField: 'accountId' }]
+  allOrdersReportFull: [{ model: 'lingXingAmazonReport', accountField: 'accountId' }],
+  storeSummarySalesFull: [{ model: 'lingXingStoreSummarySales', accountField: 'accountId' }],
+  reimbursementReportFull: [{ model: 'lingXingReimbursementReport', accountField: 'accountId' }],
+  purchaseReportProductFull: [{ model: 'lingXingPurchaseReportProduct', accountField: 'accountId' }],
+  purchaseReportSupplierFull: [{ model: 'lingXingPurchaseReportSupplier', accountField: 'accountId' }],
+  purchaseReportBuyerFull: [{ model: 'lingXingPurchaseReportBuyer', accountField: 'accountId' }],
+  returnOrderAnalysisFull: [{ model: 'lingXingReturnOrderAnalysis', accountField: 'accountId' }],
+  operateLogFull: [{ model: 'lingXingOperateLog', accountField: 'accountId' }],
+  fbaStorageFeeMonthFull: [{ model: 'lingXingFbaStorageFeeMonth', accountField: 'accountId' }]
 };
 
 /**
