@@ -19,18 +19,229 @@ model AmazonStore {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   countryCode  String   // country code（如"US"）
+  accountType   String   @default("sc") // 账户类型：sc=Seller Central，vc=Vendor Central
 
   linkedAt       DateTime?  // 授权/关联时间
   archived       Boolean  @default(false) // 是否归档
   isAuthorized   Boolean  @default(true) // 是否授权
   data           Json?    // 完整的店铺信息
 
-  @@unique([accountId, sellerId, countryCode])
+  vcSyncStates         AmazonVcSyncState[]
+  vcPurchaseOrders     AmazonVcPurchaseOrder[]
+  vcPoSyncRetryQueues  AmazonVcPoSyncRetryQueue[]
+  vcDfSyncRetryQueues  AmazonVcDfSyncRetryQueue[]
+  vcDfOrders           AmazonVcDfOrder[]
+  vcShipmentDetails    AmazonVcShipmentDetail[]
+  vcReportSyncStates   AmazonVcReportSyncState[]
+  vcReportData         AmazonVcReportData[]
+  vcReportPendingQueues AmazonVcReportPendingQueue[]
+
+  @@unique([accountId, sellerId, countryCode, accountType])
   @@index([sellerId])
   @@index([accountId])
   @@index([countryCode])
+  @@index([accountType])
   @@index([archived])
   @@map("amazon_stores")
+}
+
+// 亚马逊 VC 增量同步状态（PO/DF 共用，按 syncType 区分）
+model AmazonVcSyncState {
+  id            String   @id @default(uuid())
+  amazonStoreId String
+  syncType      String   // 'po' | 'df' | 'shipments'
+  lastEndAt     BigInt   // 上次同步的结束时间（Unix 毫秒）
+  lastSyncAt    DateTime @updatedAt
+  recordCount   Int      @default(0)
+
+  amazonStore   AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  @@unique([amazonStoreId, syncType])
+  @@index([amazonStoreId])
+  @@map("amazon_vc_sync_states")
+}
+
+// 亚马逊 VC PO 限流重试队列
+model AmazonVcPoSyncRetryQueue {
+  id            String   @id @default(uuid())
+  amazonStoreId String   // 关联 AmazonStore.id
+  createdAfter  String   // 时间段起点 ISO
+  createdBefore String   // 时间段终点 ISO
+  retryAt       DateTime // 计划重试时间
+  attempts      Int      @default(0) // 已重试次数（入队后重试）
+  createdAt     DateTime @default(now())
+
+  amazonStore   AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  @@index([retryAt])
+  @@index([amazonStoreId])
+  @@map("amazon_vc_po_sync_retry_queue")
+}
+
+// 亚马逊 VC 采购单（来自 SP-API Vendor Orders，与领星无关）
+model AmazonVcPurchaseOrder {
+  id                   String   @id @default(uuid())
+  amazonStoreId        String   // 关联 AmazonStore.id
+  purchaseOrderNumber  String   // PO 号
+  orderDate            DateTime? // 订单日期
+  orderState           String?  // 状态
+  sellingPartyPartyId  String?  // 供应商 Party ID
+  shipToPartyPartyId   String?  // 收货方 Party ID
+  data                 Json?    // 原始 API 响应
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  amazonStore          AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  items                AmazonVcPurchaseOrderItem[]
+
+  @@unique([amazonStoreId, purchaseOrderNumber])
+  @@index([amazonStoreId])
+  @@index([orderDate])
+  @@map("amazon_vc_purchase_orders")
+}
+
+// 亚马逊 VC 采购单明细
+model AmazonVcPurchaseOrderItem {
+  id                   String   @id @default(uuid())
+  purchaseOrderId      String   // 关联 AmazonVcPurchaseOrder.id
+  amazonStoreId        String   // 冗余，便于按店铺查
+  lineNumber           String?  // 行号
+  buyerProductId       String?  // 买家商品 ID
+  vendorProductId      String?  // 供应商商品 ID
+  quantity             Int?    // 数量
+  unitPrice            Decimal? @db.Decimal(18, 4)
+  data                 Json?   // 原始行数据
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  purchaseOrder        AmazonVcPurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  @@index([purchaseOrderId])
+  @@index([amazonStoreId])
+  @@map("amazon_vc_purchase_order_items")
+}
+
+// ---------- VC DF（Direct Fulfillment）订单 ----------
+// 亚马逊 VC DF 限流重试队列
+model AmazonVcDfSyncRetryQueue {
+  id            String   @id @default(uuid())
+  amazonStoreId String
+  createdAfter  String
+  createdBefore String
+  retryAt       DateTime
+  attempts      Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  amazonStore   AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  @@index([retryAt])
+  @@index([amazonStoreId])
+  @@map("amazon_vc_df_sync_retry_queue")
+}
+
+// 亚马逊 VC DF 订单（SP-API Vendor Direct Fulfillment Orders）
+model AmazonVcDfOrder {
+  id                   String   @id @default(uuid())
+  amazonStoreId        String
+  purchaseOrderNumber  String
+  orderDate            DateTime?
+  orderStatus          String?
+  data                 Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  amazonStore          AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  items                AmazonVcDfOrderItem[]
+
+  @@unique([amazonStoreId, purchaseOrderNumber])
+  @@index([amazonStoreId])
+  @@index([orderDate])
+  @@map("amazon_vc_df_orders")
+}
+
+// 亚马逊 VC DF 订单明细
+model AmazonVcDfOrderItem {
+  id                   String   @id @default(uuid())
+  orderId              String
+  amazonStoreId        String
+  lineNumber           String?
+  buyerProductId      String?
+  vendorProductId     String?
+  quantity             Int?
+  data                 Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  order                AmazonVcDfOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@index([orderId])
+  @@index([amazonStoreId])
+  @@map("amazon_vc_df_order_items")
+}
+
+// 亚马逊 VC 货件明细（SP-API Vendor Shipments GetShipmentDetails，最近 60 天等）
+model AmazonVcShipmentDetail {
+  id              String   @id @default(uuid())
+  amazonStoreId   String
+  amazonReferenceNumber String   // ARN 或 shipmentId，用于去重
+  shipmentId      String?  // 若有
+  data            Json?    // 完整 API 返回
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  amazonStore     AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  @@unique([amazonStoreId, amazonReferenceNumber])
+  @@index([amazonStoreId])
+  @@index([shipmentId])
+  @@map("amazon_vc_shipment_details")
+}
+
+// 亚马逊 VC 报表增量同步状态（按 store + reportType + marketplaceId 维度，记录上次同步到的日期）
+model AmazonVcReportSyncState {
+  id            String   @id @default(uuid())
+  amazonStoreId String
+  reportType    String   // 如 GET_VENDOR_SALES_REPORT
+  marketplaceId String   // 店铺对应 marketplaceId 或 'ALL'
+  lastDataEndAt DateTime? // 上次同步到的数据日期（日粒度）
+  lastSyncAt    DateTime @updatedAt
+  recordCount   Int      @default(0)
+
+  amazonStore   AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  @@unique([amazonStoreId, reportType, marketplaceId])
+  @@index([amazonStoreId])
+  @@map("amazon_vc_report_sync_states")
+}
+
+// 亚马逊 VC 报表数据（按天存储，data 为当日报表行数组）
+model AmazonVcReportData {
+  id            String   @id @default(uuid())
+  amazonStoreId String
+  reportType    String
+  dataDate      DateTime // 数据日期（按天）
+  marketplaceId String   // 对应 marketplaceId 或 'ALL'
+  data          Json?    // 报表行数组
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  amazonStore   AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  @@unique([amazonStoreId, reportType, dataDate, marketplaceId])
+  @@index([amazonStoreId])
+  @@index([reportType])
+  @@index([dataDate])
+  @@map("amazon_vc_report_data")
+}
+
+// 亚马逊 VC 报表待处理队列（createReport 后等待 getReport DONE 的任务）
+model AmazonVcReportPendingQueue {
+  id            String   @id @default(uuid())
+  amazonStoreId String
+  reportId      String
+  reportType    String
+  dataDate      DateTime?
+  marketplaceId String
+  retryAt       DateTime
+  attempts      Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  amazonStore   AmazonStore @relation(fields: [amazonStoreId], references: [id], onDelete: Cascade)
+  @@index([retryAt])
+  @@index([amazonStoreId])
+  @@map("amazon_vc_report_pending_queue")
 }
 
 

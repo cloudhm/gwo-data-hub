@@ -1068,7 +1068,7 @@ class LingXingProductService extends LingXingApiClient {
   async incrementalSyncLocalProducts(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7000,
+      defaultLookbackDays = 365,
       timezone = 'Asia/Shanghai',
       pageSize = 1000,
       delayBetweenPages = 500

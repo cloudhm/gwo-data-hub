@@ -1427,7 +1427,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async incrementalSyncAllOrdersReport(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7000,
+      defaultLookbackDays = 365,
       timezone = 'Asia/Shanghai',
       date_type = 1,
       pageSize = 1000,
@@ -1556,7 +1556,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async _incrementalSyncReportBySid(accountId, taskType, fetchAllFn, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7000,
+      defaultLookbackDays = 365,
       timezone = 'Asia/Shanghai',
       delayBetweenShops = 500,
       pageSize = 1000,
@@ -1754,7 +1754,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async incrementalSyncTransactionReport(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7000,
+      defaultLookbackDays = 365,
       timezone = 'Asia/Shanghai',
       delayBetweenShops = 500,
       pageSize = 1000,
@@ -1870,7 +1870,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async incrementalSyncAmazonFulfilledShipmentsReport(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7000,
+      defaultLookbackDays = 365,
       timezone = 'Asia/Shanghai',
       delayBetweenShops = 500,
       pageSize = 1000,
@@ -1968,7 +1968,7 @@ class LingXingAmazonService extends LingXingApiClient {
   async incrementalSyncFbaInventoryEventDetailReport(accountId, options = {}) {
     const {
       endDate = null,
-      defaultLookbackDays = 7000,
+      defaultLookbackDays = 365,
       timezone = 'Asia/Shanghai',
       delayBetweenShops = 500,
       pageSize = 1000,

@@ -63,7 +63,7 @@ class LingXingSyncStateService {
    */
   async getIncrementalDateRange(accountId, taskType, sid, options = {}) {
     const {
-      defaultLookbackDays = 7000,
+      defaultLookbackDays = 365,
       endDate: optionEndDate = null,
       timezone = 'Asia/Shanghai'
     } = options;

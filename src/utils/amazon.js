@@ -250,9 +250,98 @@ function getAmazonMarketplaceByMarketplaceId(marketplaceId) {
   return marketplace || null;
 }
 
+/**
+ * Seller Central 授权页域名（按国家/市场）
+ * 参考: https://developer-docs.amazon.com/sp-api/docs/seller-central-urls
+ */
+const SELLER_CENTRAL_HOSTS = {
+  US: 'sellercentral.amazon.com',
+  CA: 'sellercentral.amazon.ca',
+  MX: 'sellercentral.amazon.com.mx',
+  BR: 'sellercentral.amazon.com.br',
+  UK: 'sellercentral.amazon.co.uk',
+  DE: 'sellercentral.amazon.de',
+  FR: 'sellercentral.amazon.fr',
+  IT: 'sellercentral.amazon.it',
+  ES: 'sellercentral.amazon.es',
+  NL: 'sellercentral.amazon.nl',
+  SE: 'sellercentral.amazon.se',
+  PL: 'sellercentral.amazon.pl',
+  BE: 'sellercentral.amazon.com.be',
+  TR: 'sellercentral.amazon.com.tr',
+  EG: 'sellercentral.amazon.eg',
+  SA: 'sellercentral.amazon.sa',
+  AE: 'sellercentral.amazon.ae',
+  IN: 'sellercentral.amazon.in',
+  JP: 'sellercentral.amazon.co.jp',
+  SG: 'sellercentral.amazon.com.sg',
+  AU: 'sellercentral.amazon.com.au'
+};
+
+/**
+ * Vendor Central 授权页域名（按国家/市场）
+ * 参考: https://developer-docs.amazon.com/sp-api/docs/vendor-central-urls
+ */
+const VENDOR_CENTRAL_HOSTS = {
+  US: 'vendorcentral.amazon.com',
+  CA: 'vendorcentral.amazon.ca',
+  MX: 'vendorcentral.amazon.com.mx',
+  BR: 'vendorcentral.amazon.com.br',
+  UK: 'vendorcentral.amazon.co.uk',
+  DE: 'vendorcentral.amazon.de',
+  FR: 'vendorcentral.amazon.fr',
+  IT: 'vendorcentral.amazon.it',
+  ES: 'vendorcentral.amazon.es',
+  NL: 'vendorcentral.amazon.nl',
+  SE: 'vendorcentral.amazon.se',
+  PL: 'vendorcentral.amazon.pl',
+  BE: 'vendorcentral.amazon.com.be',
+  TR: 'vendorcentral.amazon.com.tr',
+  EG: 'vendorcentral.amazon.me',
+  SA: 'vendorcentral.amazon.me',
+  AE: 'vendorcentral.amazon.me',
+  IN: 'www.vendorcentral.in',
+  JP: 'vendorcentral.amazon.co.jp',
+  SG: 'vendorcentral.amazon.com.sg',
+  AU: 'vendorcentral.amazon.com.au'
+};
+
+/**
+ * 获取 SP-API 授权页的 base URL（仅协议+主机，不含路径）
+ * @param {string} [countryCode] 国家二字码（如 US、UK），不传则默认 US
+ * @param {'sc'|'vc'} accountType 账户类型：sc=Seller Central，vc=Vendor Central
+ * @returns {string} 如 'https://sellercentral.amazon.com' 或 'https://vendorcentral.amazon.co.uk'
+ */
+function getAuthBaseUrl(countryCode, accountType = 'sc') {
+  const code = (countryCode || 'US').toString().trim().toUpperCase();
+  const hosts = accountType === 'vc' ? VENDOR_CENTRAL_HOSTS : SELLER_CENTRAL_HOSTS;
+  const host = hosts[code] || hosts.US;
+  return `https://${host}`;
+}
+
+/**
+ * 生成 Amazon API 请求编号（用于日志关联）
+ * @returns {string} 如 amz-m5x2k-8f3a
+ */
+function generateAmazonRequestId() {
+  return `amz-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/**
+ * 从 SP-API 错误对象中取出 Amazon 返回的请求编号（x-amzn-RequestId），便于排查与提供给亚马逊支持
+ * @param {Error} e - 捕获到的错误（SDK 在抛错时会附带 amazonRequestId）
+ * @returns {string|undefined}
+ */
+function getAmazonRequestIdFromError(e) {
+  return e?.amazonRequestId;
+}
+
 export {
   AMAZON_MARKETPLACES,
   getAmazonMarketplace,
   getAmazonMarketplaces,
-  getAmazonMarketplaceByMarketplaceId
+  getAmazonMarketplaceByMarketplaceId,
+  getAuthBaseUrl,
+  generateAmazonRequestId,
+  getAmazonRequestIdFromError
 };
