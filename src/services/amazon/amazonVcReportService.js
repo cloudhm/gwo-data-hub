@@ -350,7 +350,15 @@ async function incrementalSyncReportTypeForAllStores(reportType, options = {}) {
     } catch (e) {
       const apiRequestId = getAmazonRequestIdFromError(e);
       if (options.logErrors !== false) {
-        console.error(`[VC Report] ${store.id} ${reportType}`, e?.message || e, apiRequestId ? `apiRequestId=${apiRequestId}` : '');
+        const ts = new Date().toISOString();
+        const responseDate = e?.response?.headers?.date;
+        console.error(
+          `[VC Report] ${store.id} ${reportType}`,
+          e?.message || e,
+          apiRequestId ? `apiRequestId=${apiRequestId}` : '',
+          `timestamp=${ts}`,
+          responseDate ? `responseDate=${responseDate}` : ''
+        );
       }
       results.push({ storeId: store.id, reportType, error: e?.message || String(e), ...(apiRequestId && { amazonRequestId: apiRequestId }) });
     }
@@ -373,7 +381,15 @@ async function incrementalSyncAllVcReports(options = {}) {
       } catch (e) {
         const apiRequestId = getAmazonRequestIdFromError(e);
         if (options.logErrors !== false) {
-          console.error(`[VC Report] ${store.id} ${config.reportType}`, e?.message || e, apiRequestId ? `apiRequestId=${apiRequestId}` : '');
+          const ts = new Date().toISOString();
+          const responseDate = e?.response?.headers?.date;
+          console.error(
+            `[VC Report] ${store.id} ${config.reportType}`,
+            e?.message || e,
+            apiRequestId ? `apiRequestId=${apiRequestId}` : '',
+            `timestamp=${ts}`,
+            responseDate ? `responseDate=${responseDate}` : ''
+          );
         }
         results.push({ storeId: store.id, reportType: config.reportType, error: e?.message || String(e), ...(apiRequestId && { amazonRequestId: apiRequestId }) });
       }
@@ -442,7 +458,15 @@ async function processReportPendingQueue(options = {}) {
       }
       if (options.logErrors !== false) {
         const apiRequestId = getAmazonRequestIdFromError(e);
-        console.error(`[VC Report Queue] ${item.reportId}`, e?.message || e, apiRequestId ? `apiRequestId=${apiRequestId}` : '');
+        const ts = new Date().toISOString();
+        const responseDate = e?.response?.headers?.date;
+        console.error(
+          `[VC Report Queue] ${item.reportId}`,
+          e?.message || e,
+          apiRequestId ? `apiRequestId=${apiRequestId}` : '',
+          `timestamp=${ts}`,
+          responseDate ? `responseDate=${responseDate}` : ''
+        );
       }
     }
     await sleep(500);
