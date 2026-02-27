@@ -20,7 +20,7 @@ const LOG_PREFIX = '[IncrementalSync]';
 async function runAccountLevelIncrementalSync(accountId, taskType, options, fetchFn) {
   const {
     endDate = null,
-    defaultLookbackDays = 7000,
+    defaultLookbackDays = 365,
     timezone = 'Asia/Shanghai',
     extraParams = {}
   } = options;

@@ -587,6 +587,52 @@ async function lingxingVcRoutes(fastify, options) {
   });
 
   /**
+   * 查询VC订单详情（DF类型）
+   * POST /api/lingxing/vc/vc-orders/df-detail/:accountId
+   * Body: {
+   *   vc_store_id: "134225003201380864",   // 必填：VC店铺id
+   *   purchase_order_number: "XB95bX69r"  // 必填：订单编号
+   * }
+   */
+  fastify.post('/vc-orders/df-detail/:accountId', async (request, reply) => {
+    const { accountId } = request.params;
+    const { vc_store_id, purchase_order_number } = request.body;
+
+    if (!vc_store_id || !purchase_order_number) {
+      return reply.code(400).send({
+        success: false,
+        message: 'vc_store_id、purchase_order_number 参数必填'
+      });
+    }
+
+    try {
+      const result = await lingXingVcService.getVcOrderDfDetail(accountId, vc_store_id, purchase_order_number);
+
+      return {
+        success: true,
+        message: '获取VC订单详情(DF)成功',
+        data: result.data,
+        meta: {
+          code: result.code,
+          message: result.message,
+          error_details: result.error_details,
+          request_id: result.request_id,
+          response_time: result.response_time
+        }
+      };
+    } catch (error) {
+      fastify.log.error('获取VC订单详情(DF)错误:', error);
+      reply.code(error.code === '3001008' ? 429 : 500).send({
+        success: false,
+        message: error.message || '获取VC订单详情(DF)失败',
+        code: error.code,
+        description: error.description,
+        action: error.action
+      });
+    }
+  });
+
+  /**
    * 查询VC发货单列表
    * POST /api/lingxing/vc/vc-invoices/:accountId
    * Body: {

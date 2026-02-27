@@ -6,6 +6,35 @@ import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunne
  * 领星ERP VC服务
  * VC相关接口（VC店铺、VC Listing、VC订单、VC发货单等）
  */
+/** 领星 VC 订单列表接口：时间间隔最长不超过 90 天 */
+const VC_ORDER_DATE_RANGE_MAX_DAYS = 90;
+
+/**
+ * 将日期范围按最多 maxDays 天拆成多段（领星 VC 订单接口要求单次不超过 90 天）
+ * @param {string} startDateStr - Y-m-d
+ * @param {string} endDateStr - Y-m-d
+ * @param {number} maxDays
+ * @returns {{ start_date: string, end_date: string }[]}
+ */
+function getVcOrderDateRangeChunks(startDateStr, endDateStr, maxDays = VC_ORDER_DATE_RANGE_MAX_DAYS) {
+  const start = new Date(startDateStr + 'T00:00:00.000Z');
+  const end = new Date(endDateStr + 'T23:59:59.999Z');
+  if (start > end) return [];
+  const chunks = [];
+  let curStart = new Date(start.getTime());
+  while (curStart <= end) {
+    const curEnd = new Date(curStart.getTime());
+    curEnd.setUTCDate(curEnd.getUTCDate() + maxDays - 1);
+    if (curEnd > end) curEnd.setTime(end.getTime());
+    chunks.push({
+      start_date: curStart.toISOString().slice(0, 10),
+      end_date: curEnd.toISOString().slice(0, 10)
+    });
+    curStart.setUTCDate(curStart.getUTCDate() + maxDays);
+  }
+  return chunks;
+}
+
 class LingXingVcService extends LingXingApiClient {
   constructor() {
     super();
@@ -637,39 +666,51 @@ class LingXingVcService extends LingXingApiClient {
       // 保存到数据库
       if (orders.length > 0) {
         await this.saveVcOrders(accountId, orders);
-        
-        // 如果是PO类型订单（purchase_order_type = 1），自动查询并保存订单详情
-        const poOrders = orders.filter(order => order.purchase_order_type === 1 || order.purchase_order_type === '1');
-        if (poOrders.length > 0) {
-          console.log(`发现 ${poOrders.length} 个PO类型订单，开始自动查询订单详情...`);
-          
-          // 串行查询PO订单详情（避免请求过快触发限流）
-          // 每个请求之间延迟，让API客户端的重试机制处理限流错误
-          for (let i = 0; i < poOrders.length; i++) {
-            const order = poOrders[i];
-            if (order.local_po_number) {
-              try {
-                await this.getVcOrderPoDetail(accountId, order.local_po_number);
-                console.log(`[${i + 1}/${poOrders.length}] 已获取PO订单详情: ${order.local_po_number}`);
-              } catch (error) {
-                // 如果是限流错误，API客户端会自动重试（最多2次，每次延迟1秒）
-                // 如果重试后仍然失败，记录错误但继续处理其他订单
-                if (error.code === '3001008') {
-                  console.warn(`[${i + 1}/${poOrders.length}] PO订单详情查询被限流（已自动重试）: ${order.local_po_number}`);
-                } else {
-                  console.error(`[${i + 1}/${poOrders.length}] 获取PO订单详情失败 ${order.local_po_number}:`, error.message);
-                }
-                // 不抛出错误，继续处理其他订单
+
+        // 按订单类型分别拉取订单详情：type 0 调 DF 详情，type 1 调 PO 详情
+        const dfOrders = orders.filter(o => o.purchase_order_type === 0 || o.purchase_order_type === '0');
+        const poOrders = orders.filter(o => o.purchase_order_type === 1 || o.purchase_order_type === '1');
+
+        for (let i = 0; i < dfOrders.length; i++) {
+          const order = dfOrders[i];
+          if (order.vc_store_id && order.purchase_order_number) {
+            try {
+              await this.getVcOrderDfDetail(accountId, order.vc_store_id, order.purchase_order_number);
+              console.log(`[DF ${i + 1}/${dfOrders.length}] 已获取订单详情: ${order.purchase_order_number}`);
+            } catch (error) {
+              if (error.code === '3001008') {
+                console.warn(`[DF ${i + 1}/${dfOrders.length}] 订单详情查询被限流: ${order.purchase_order_number}`);
+              } else {
+                console.error(`[DF ${i + 1}/${dfOrders.length}] 获取DF订单详情失败 ${order.purchase_order_number}:`, error.message);
               }
             }
-            
-            // 每个请求之间延迟，避免请求过快（除了最后一个）
-            if (i < poOrders.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 1000)); // 延迟1秒，避免请求过快
+            if (i < dfOrders.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
             }
           }
-          
-          console.log(`PO订单详情查询完成，共处理 ${poOrders.length} 个订单`);
+        }
+
+        for (let i = 0; i < poOrders.length; i++) {
+          const order = poOrders[i];
+          if (order.local_po_number) {
+            try {
+              await this.getVcOrderPoDetail(accountId, order.local_po_number);
+              console.log(`[PO ${i + 1}/${poOrders.length}] 已获取订单详情: ${order.local_po_number}`);
+            } catch (error) {
+              if (error.code === '3001008') {
+                console.warn(`[PO ${i + 1}/${poOrders.length}] 订单详情查询被限流: ${order.local_po_number}`);
+              } else {
+                console.error(`[PO ${i + 1}/${poOrders.length}] 获取PO订单详情失败 ${order.local_po_number}:`, error.message);
+              }
+            }
+            if (i < poOrders.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        }
+
+        if (dfOrders.length > 0 || poOrders.length > 0) {
+          console.log(`订单详情拉取完成，DF: ${dfOrders.length}，PO: ${poOrders.length}`);
         }
       }
 
@@ -965,6 +1006,7 @@ class LingXingVcService extends LingXingApiClient {
 
   /**
    * 自动拉取所有VC订单数据（自动处理分页）
+   * 若传入 start_date/end_date，会按 90 天一段拆分后逐段拉取（领星接口要求时间间隔不超过 90 天）
    * @param {string} accountId - 领星账户ID
    * @param {Object} filterParams - 筛选参数
    * @param {Object} options - 选项
@@ -992,57 +1034,79 @@ class LingXingVcService extends LingXingApiClient {
       }
 
       const allOrders = [];
-      let currentOffset = 0;
       const actualPageSize = Math.min(pageSize, 200); // 最大200
-      let totalCount = 0;
-      let currentPage = 0;
-      let hasMore = true;
 
-      // 自动分页获取所有VC订单数据
-      while (hasMore) {
-        currentPage++;
-        console.log(`正在获取第 ${currentPage} 页VC订单（offset: ${currentOffset}, length: ${actualPageSize}）...`);
+      // 若有 start_date/end_date，按最多 90 天拆成多段（领星接口限制）
+      const dateChunks = filterParams.start_date && filterParams.end_date
+        ? getVcOrderDateRangeChunks(filterParams.start_date, filterParams.end_date, VC_ORDER_DATE_RANGE_MAX_DAYS)
+        : [{}];
 
-        try {
-          const pageResult = await this.getVcOrderPageList(accountId, {
-            ...filterParams,
-            offset: currentOffset,
-            length: actualPageSize
-          });
+      if (dateChunks.length > 1) {
+        console.log(`日期范围 ${filterParams.start_date} ~ ${filterParams.end_date} 超过 ${VC_ORDER_DATE_RANGE_MAX_DAYS} 天，将分 ${dateChunks.length} 段拉取`);
+      }
 
-          const pageOrders = pageResult.data || [];
-          const pageTotal = pageResult.total || 0;
+      for (let chunkIndex = 0; chunkIndex < dateChunks.length; chunkIndex++) {
+        const chunk = dateChunks[chunkIndex];
+        const paramsForChunk = { ...filterParams, ...chunk };
 
-          if (currentPage === 1) {
-            totalCount = pageTotal;
-            console.log(`总共需要获取 ${totalCount} 条VC订单数据，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
-          }
+        if (chunk.start_date && chunk.end_date) {
+          console.log(`正在拉取第 ${chunkIndex + 1}/${dateChunks.length} 段日期: ${chunk.start_date} ~ ${chunk.end_date}`);
+        }
 
-          allOrders.push(...pageOrders);
-          console.log(`第 ${currentPage} 页获取完成，本页 ${pageOrders.length} 条数据，累计 ${allOrders.length} 条数据`);
+        let currentOffset = 0;
+        let totalCount = 0;
+        let currentPage = 0;
+        let hasMore = true;
+        let chunkOrderCount = 0;
 
-          // 调用进度回调
-          if (onProgress) {
-            onProgress(currentPage, Math.ceil(totalCount / actualPageSize), allOrders.length, totalCount);
-          }
+        while (hasMore) {
+          currentPage++;
+          console.log(`正在获取第 ${currentPage} 页VC订单（offset: ${currentOffset}, length: ${actualPageSize}）...`);
 
-          // 判断是否还有更多数据
-          if (pageOrders.length < actualPageSize || allOrders.length >= totalCount) {
-            hasMore = false;
-          } else {
-            currentOffset += actualPageSize;
-            // 分页之间延迟，避免请求过快
-            if (delayBetweenPages > 0) {
-              await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+          try {
+            const pageResult = await this.getVcOrderPageList(accountId, {
+              ...paramsForChunk,
+              offset: currentOffset,
+              length: actualPageSize
+            });
+
+            const pageOrders = pageResult.data || [];
+            const pageTotal = pageResult.total || 0;
+            chunkOrderCount += pageOrders.length;
+
+            if (currentPage === 1) {
+              totalCount = pageTotal;
+              console.log(`本段共 ${totalCount} 条，预计 ${Math.ceil(totalCount / actualPageSize)} 页`);
             }
+
+            allOrders.push(...pageOrders);
+            console.log(`第 ${currentPage} 页获取完成，本页 ${pageOrders.length} 条，累计 ${allOrders.length} 条`);
+
+            if (onProgress) {
+              const totalPages = Math.ceil(totalCount / actualPageSize) || 1;
+              onProgress(currentPage, totalPages, allOrders.length, allOrders.length);
+            }
+
+            if (pageOrders.length < actualPageSize || chunkOrderCount >= totalCount) {
+              hasMore = false;
+            } else {
+              currentOffset += actualPageSize;
+              if (delayBetweenPages > 0) {
+                await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
+              }
+            }
+          } catch (error) {
+            console.error(`获取第 ${currentPage} 页VC订单失败:`, error.message);
+            if (allOrders.length === 0) {
+              throw error;
+            }
+            hasMore = false;
           }
-        } catch (error) {
-          console.error(`获取第 ${currentPage} 页VC订单失败:`, error.message);
-          // 如果已经获取了一些数据，继续返回；否则抛出错误
-          if (allOrders.length === 0) {
-            throw error;
-          }
-          hasMore = false;
+        }
+
+        // 段与段之间短暂延迟，避免限流
+        if (chunkIndex < dateChunks.length - 1 && delayBetweenPages > 0) {
+          await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
         }
       }
 
@@ -1053,11 +1117,98 @@ class LingXingVcService extends LingXingApiClient {
         total: allOrders.length,
         stats: {
           totalCount: allOrders.length,
-          pagesFetched: currentPage
+          pagesFetched: dateChunks.length
         }
       };
     } catch (error) {
       console.error('自动拉取所有VC订单数据失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 查询VC订单详情（DF类型）
+   * API: POST /basicOpen/platformOrder/vcOrderDf/detail
+   * @param {string} accountId - 领星账户ID
+   * @param {string} vcStoreId - VC店铺id
+   * @param {string} purchaseOrderNumber - 订单编号
+   * @returns {Promise<Object>} VC订单详情数据
+   */
+  async getVcOrderDfDetail(accountId, vcStoreId, purchaseOrderNumber) {
+    try {
+      const account = await prisma.lingXingAccount.findUnique({
+        where: { id: accountId }
+      });
+
+      if (!account) {
+        throw new Error(`领星账户不存在: ${accountId}`);
+      }
+
+      if (!vcStoreId || !purchaseOrderNumber) {
+        throw new Error('vc_store_id、purchase_order_number 参数必填');
+      }
+
+      const response = await this.post(
+        account,
+        '/basicOpen/platformOrder/vcOrderDf/detail',
+        {
+          vc_store_id: vcStoreId,
+          purchase_order_number: purchaseOrderNumber
+        },
+        {
+          successCode: [0, 200, '200']
+        }
+      );
+
+      if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
+        throw new Error(response.message || '获取VC订单详情(DF)失败');
+      }
+
+      const detailData = response.data || {};
+      if (detailData && detailData.local_po_number) {
+        try {
+          const existingOrder = await prisma.lingXingVcOrder.findFirst({
+            where: {
+              localPoNumber: detailData.local_po_number,
+              accountId: accountId
+            }
+          });
+
+          if (existingOrder) {
+            await prisma.lingXingVcOrder.update({
+              where: {
+                localPoNumber_vcStoreId: {
+                  localPoNumber: detailData.local_po_number,
+                  vcStoreId: existingOrder.vcStoreId || ''
+                }
+              },
+              data: {
+                orderDetail: detailData,
+                updatedAt: new Date()
+              }
+            });
+          } else {
+            console.warn(`VC订单不存在，无法保存DF详情: ${purchaseOrderNumber}`);
+          }
+        } catch (updateError) {
+          if (updateError.code === 'P2025') {
+            console.warn(`VC订单不存在，无法保存DF详情: ${purchaseOrderNumber}`);
+          } else {
+            console.error('保存VC订单DF详情失败:', updateError.message);
+          }
+        }
+      }
+
+      return {
+        data: detailData,
+        code: response.code,
+        message: response.message,
+        error_details: response.error_details || [],
+        request_id: response.request_id,
+        response_time: response.response_time
+      };
+    } catch (error) {
+      console.error('获取VC订单详情(DF)失败:', error.message);
       throw error;
     }
   }
@@ -1810,16 +1961,39 @@ class LingXingVcService extends LingXingApiClient {
   }
 
   /**
-   * VC 订单增量同步（支持 search_field_time，不传则用接口默认；可按修改时间筛选时传入 search_field_time）
+   * VC 订单增量同步（按订单更新时间 search_field_time=3）
+   * purchase_order_type 0(DF)、1(PO) 分别拉取，每次拉取后保存订单并拉取对应类型详情
    */
   async incrementalSyncVcOrders(accountId, options = {}) {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'vcOrder',
-      { ...options, extraParams: { purchase_order_type: ['0', '1'], search_field_time: options.search_field_time } },
+      {
+        ...options,
+        extraParams: {
+          search_field_time: '3', // 订单更新时间
+          purchase_order_type: undefined // 由 fetchFn 内分两次拉取 0 和 1
+        }
+      },
       async (id, params, opts) => {
-        const res = await this.fetchAllVcOrders(id, params, opts);
-        return { total: res?.total ?? res?.orders?.length ?? 0, data: res?.orders };
+        let totalRecords = 0;
+        const allOrders = [];
+
+        // 分别拉取 type 0 (DF) 和 type 1 (PO)，均使用更新时间
+        for (const orderType of [['0'], ['1']]) {
+          const res = await this.fetchAllVcOrders(id, {
+            ...params,
+            purchase_order_type: orderType,
+            search_field_time: '3',
+            start_date: params.start_date,
+            end_date: params.end_date
+          }, opts);
+          const list = res?.orders ?? [];
+          allOrders.push(...list);
+          totalRecords += list.length;
+        }
+
+        return { total: totalRecords, data: allOrders, orders: allOrders };
       }
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
