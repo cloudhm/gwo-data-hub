@@ -191,6 +191,15 @@ export const SYNC_TASKS = [
   ['storageReportFbaDetail', '报表-FBA库存报表明细增量同步', 0],
   // /api/lingxing/sync/run/fbaStorageFeeMonth
   ['fbaStorageFeeMonth', '财务-FBA仓储费月度报表增量同步', 0],
+  
+  // /api/lingxing/sync/run-full/vcSellers
+  ['vcSellers', 'VC-VC店铺全量同步', 1],
+  // /api/lingxing/sync/run-full/vcListings
+  ['vcListings', 'VC-VCListing全量同步', 1],
+  // /api/lingxing/sync/run/vcOrder
+  ['vcOrder', 'VC-VC订单增量同步', 0],
+  // /api/lingxing/sync/run/vcInvoice
+  ['vcInvoice', 'VC-VC发货单增量同步', 0],
 ];
 
 /**
