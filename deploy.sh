@@ -21,8 +21,8 @@ npm install --production=false
 echo "[Deploy] 3/5 Prisma 生成..."
 npx prisma generate
 
-echo "[Deploy] 4/5 数据库同步 (prisma db push)..."
-npm run prisma:push
+echo "[Deploy] 4/5 数据库迁移 (prisma migrate deploy)..."
+npm run prisma:migrate:deploy
 
 echo "[Deploy] 5/5 PM2 重启..."
 if pm2 list | grep -q "gwo-data-hub"; then
