@@ -1012,7 +1012,6 @@ class LingXingReportService extends LingXingApiClient {
       const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
       console.log(`预计总查询次数: ${shopList.length} 店铺 × ${summaryFields.length} 维度 × ${daysDiff} 天`);
 
-      const allData = [];
       const stats = {
         totalShops: shopList.length,
         successShops: 0,
@@ -1116,7 +1115,7 @@ class LingXingReportService extends LingXingApiClient {
                         available_inventory_formula_zh: pageResult.available_inventory_formula_zh
                       };
                       dayPages.push({ offset, length: actualPageSize, ...pagePayload });
-                      allData.push(...pageData);
+                      // 不再累积到 allData，避免多页多天时内存持续增长；总条数由 stats.totalRecords 统计
 
                       stats.successPages++;
                       dayTotalRecords += pageData.length;
@@ -1161,6 +1160,8 @@ class LingXingReportService extends LingXingApiClient {
                   // 按天覆盖保存：先删该日主表+子表，再插入当日所有分页
                   if (dayPages.length > 0) {
                     await this.saveProductPerformanceForDay(accountId, shopSid, dateStr, dateStr, summaryField, dayPages);
+                    // 保存后清空当日分页引用，便于 GC 及时释放内存
+                    dayPages.length = 0;
                   }
 
                   console.log(`[${shopName}][${summaryField}][${dateStr}] 查询完成：共 ${dayTotalRecords} 条记录`);
@@ -1216,8 +1217,8 @@ class LingXingReportService extends LingXingApiClient {
       console.log(`总记录数：${stats.totalRecords} 条`);
 
       return {
-        data: allData,
-        total: allData.length,
+        data: [], // 增量拉取不再返回全量 data，避免内存占用；总条数见 stats.totalRecords
+        total: stats.totalRecords,
         stats: stats
       };
     } catch (error) {

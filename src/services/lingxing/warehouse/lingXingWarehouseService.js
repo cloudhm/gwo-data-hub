@@ -926,15 +926,16 @@ class LingXingWarehouseService extends LingXingApiClient {
       };
 
       for (const fbaInventory of fbaInventoryList) {
-        // 使用 name + sid + asin 作为唯一标识
-        // name 字段可能来自 name、product_name 或 productName，允许为空字符串
+        // 使用 name + sid + asin 作为唯一标识；asin 可能为空，此时用 seller_sku 作为 fallback（库存记录可能只有 seller_sku）
         const name = getStringValue(fbaInventory.name, fbaInventory.product_name, fbaInventory.productName) || '';
         const sid = fbaInventory.sid !== undefined && fbaInventory.sid !== null ? String(fbaInventory.sid) : null;
-        const asin = getStringValue(fbaInventory.asin);
-        
-        // 跳过缺少必要字段的记录（sid 和 asin 是唯一键的一部分，name 可以为空字符串）
+        const asinRaw = getStringValue(fbaInventory.asin);
+        const sellerSkuRaw = getStringValue(fbaInventory.seller_sku, fbaInventory.sellerSku);
+        const asin = asinRaw || sellerSkuRaw || '';
+
+        // 跳过缺少必要字段的记录：sid 必填；asin 或 seller_sku 至少有一个（用于唯一键）
         if (!sid || !asin) {
-          console.warn('FBA库存记录缺少 sid 或 asin，跳过保存:', fbaInventory);
+          console.warn('FBA库存记录缺少 sid 或 (asin/seller_sku)，跳过保存:', fbaInventory);
           continue;
         }
 
