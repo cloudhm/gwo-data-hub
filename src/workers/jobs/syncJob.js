@@ -1,5 +1,5 @@
-import lingXingUnifiedSyncService from '../../services/lingxing/sync/lingXingUnifiedSyncService.js';
 import jobTaskStatusService from '../../services/jobTaskStatusService.js';
+import lingXingUnifiedSyncService from '../../services/lingxing/sync/lingXingUnifiedSyncService.js';
 
 const LOG_PREFIX = '[sync-job]';
 const CRON_EXPRESSION = '0 1,7 * * *'; // 每天1点/7点执行
@@ -203,6 +203,73 @@ export const SYNC_TASKS = [
 ];
 
 /**
+ * 根据 taskType 查找任务定义，返回 { taskType, label, full } 或 null
+ */
+function findTaskByType(taskType) {
+  const row = SYNC_TASKS.find(([t]) => t === taskType);
+  if (!row) return null;
+  const [t, label, full] = row;
+  return { taskType: t, label, full };
+}
+
+/**
+ * 执行单个同步任务（与 cron job 相同逻辑），供 CLI 或 API 按需触发
+ * 全量/增量以 lingXingUnifiedSyncService 的 FULL/INCREMENTAL 注册表为准，避免与实现不一致
+ * @param {string} taskType - 任务类型，如 marketplaces、purchaseOrder
+ */
+export async function runSyncJobByTaskType(taskType, options = {}) {
+  const task = findTaskByType(taskType);
+  if (!task) {
+    throw new Error(`未知的 taskType: ${taskType}，可用: ${SYNC_TASKS.map(([t]) => t).join(', ')}`);
+  }
+  const { full, label } = task;
+  const jobName = `sync-job-${taskType}`;
+
+  const nextRun = jobTaskStatusService.getNextScheduledRun(new Date());
+  try {
+    await jobTaskStatusService.upsertJobTaskStatus({
+      jobName,
+      taskType,
+      nextScheduledAt: nextRun
+    });
+  } catch (e) {
+    console.error(`${LOG_PREFIX} [${taskType}] 写入 nextScheduledAt 失败:`, e?.message);
+  }
+
+  try {
+    full
+      ? await lingXingUnifiedSyncService.runFullSyncByTaskType(taskType, { useCache: false })
+      : await lingXingUnifiedSyncService.runIncrementalSyncByTaskType(taskType, { useCache: false });
+    try {
+      await jobTaskStatusService.upsertJobTaskStatus({
+        jobName,
+        taskType,
+        lastRunAt: new Date(),
+        lastStatus: 'success',
+        lastError: null
+      });
+    } catch (e) {
+      console.error(`${LOG_PREFIX} [${taskType}] 写入执行状态失败:`, e?.message);
+    }
+  } catch (err) {
+    const msg = err?.message ?? String(err);
+    console.error(`${LOG_PREFIX} [${taskType}] ${label} 失败:`, msg);
+    try {
+      await jobTaskStatusService.upsertJobTaskStatus({
+        jobName,
+        taskType,
+        lastRunAt: new Date(),
+        lastStatus: 'failed',
+        lastError: msg
+      });
+    } catch (e) {
+      console.error(`${LOG_PREFIX} [${taskType}] 写入失败状态失败:`, e?.message);
+    }
+    throw err;
+  }
+}
+
+/**
  * 生成多 job：每个 taskType 一个独立 job，同一 cron 触发时由调度层串行执行
  * 执行前后写入 JobTaskStatus（最近执行时间、是否异常、异常原因、下次计划执行时间）
  */
@@ -214,45 +281,7 @@ function buildSyncJobs() {
       cronExpression: CRON_EXPRESSION,
       enabled: true, // 可按 taskType 单独设为 false 关闭
       async handler() {
-        const nextRun = jobTaskStatusService.getNextScheduledRun(new Date());
-        try {
-          await jobTaskStatusService.upsertJobTaskStatus({
-            jobName,
-            taskType,
-            nextScheduledAt: nextRun
-          });
-        } catch (e) {
-          console.error(`${LOG_PREFIX} [${taskType}] 写入 nextScheduledAt 失败:`, e?.message);
-        }
-
-        try {
-          full ? await lingXingUnifiedSyncService.runFullSyncByTaskType(taskType, {useCache: false}) : await lingXingUnifiedSyncService.runIncrementalSyncByTaskType(taskType, {useCache: false});
-          try {
-            await jobTaskStatusService.upsertJobTaskStatus({
-              jobName,
-              taskType,
-              lastRunAt: new Date(),
-              lastStatus: 'success',
-              lastError: null
-            });
-          } catch (e) {
-            console.error(`${LOG_PREFIX} [${taskType}] 写入执行状态失败:`, e?.message);
-          }
-        } catch (err) {
-          const msg = err?.message ?? String(err);
-          console.error(`${LOG_PREFIX} [${taskType}] ${label} 失败:`, msg);
-          try {
-            await jobTaskStatusService.upsertJobTaskStatus({
-              jobName,
-              taskType,
-              lastRunAt: new Date(),
-              lastStatus: 'failed',
-              lastError: msg
-            });
-          } catch (e) {
-            console.error(`${LOG_PREFIX} [${taskType}] 写入失败状态失败:`, e?.message);
-          }
-        }
+        await runSyncJobByTaskType(taskType, {});
       }
     };
   });

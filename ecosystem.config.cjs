@@ -53,7 +53,7 @@ module.exports = {
       max_restarts: 10,
       min_uptime: '10s',
       restart_delay: 4000,
-      max_memory_restart: '500M',
+      max_memory_restart: '2G',
 
       watch: false,
       ignore_watch: ['node_modules', 'logs', '.git', 'prisma'],
