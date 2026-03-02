@@ -1,4 +1,5 @@
 import prisma from '../../../config/database.js';
+import { moveToHistoryAndDelete } from '../lingxingArchiveHelper.js';
 import LingXingApiClient from '../lingxingApiClient.js';
 import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
@@ -126,10 +127,14 @@ class LingXingToolsService extends LingXingApiClient {
       select: { id: true }
     });
     if (existing.length > 0) {
-      await prisma.lingXingOperateLog.updateMany({
-        where: { id: { in: existing.map(r => r.id) } },
-        data: { archived: true, updatedAt: new Date() }
-      });
+      if (prisma.lingXingOperateLogHistory) {
+        await moveToHistoryAndDelete(prisma, 'lingXingOperateLog', 'lingXingOperateLogHistory', { id: { in: existing.map(r => r.id) } });
+      } else {
+        await prisma.lingXingOperateLog.updateMany({
+          where: { id: { in: existing.map(r => r.id) } },
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
     }
     await prisma.lingXingOperateLog.create({
       data: { accountId, eventDate: eventDateStr, summaryType: st, data: payload || {}, archived: false }
@@ -316,10 +321,14 @@ class LingXingToolsService extends LingXingApiClient {
         startDate,
         endDate
       };
-      await prisma.lingXingKeywordRank.updateMany({
-        where,
-        data: { archived: true, updatedAt: new Date() }
-      });
+      if (prisma.lingXingKeywordRankHistory) {
+        await moveToHistoryAndDelete(prisma, 'lingXingKeywordRank', 'lingXingKeywordRankHistory', where);
+      } else {
+        await prisma.lingXingKeywordRank.updateMany({
+          where,
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
 
       if (!keywordList || keywordList.length === 0) {
         console.log('关键词列表为空，仅完成归档，未写入新记录');

@@ -3369,3 +3369,1342 @@ model LingXingStorageReportFbaDetail {
   @@index([startDate])
   @@map("ods_lingxing_storage_report_fba_detail")
 }
+
+// ========== 领星 History 表（归档数据，避免主表唯一键冲突）==========
+// 主表在全量/增量同步前将即将被覆盖的行的“归档”改为：先插入对应 History 表，再删除主表，主表不再保留 archived=true 的行。
+
+model LingXingSellerHistory {
+  id              String   @id @default(uuid())
+  sid             Int
+  accountId       String
+  mid             Int?
+  name            String?
+  sellerId        String?
+  accountName     String?
+  sellerAccountId Int?
+  region          String?
+  country         String?
+  hasAdsSetting   Int?
+  marketplaceId   String?
+  status          Int?
+  data            Json?
+  archived        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  archivedAt      DateTime @default(now())
+  @@index([accountId])
+  @@index([sid])
+  @@map("ods_lingxing_sellers_history")
+}
+
+model LingXingConceptSellerHistory {
+  id                String   @id @default(uuid())
+  conceptId         BigInt
+  accountId         String
+  mid               Int?
+  name              String?
+  sellerId          String?
+  sellerAccountName String?
+  sellerAccountId   BigInt?
+  region            String?
+  country           String?
+  status            Int?
+  data              Json?
+  archived          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  archivedAt        DateTime @default(now())
+  @@index([accountId])
+  @@index([conceptId])
+  @@map("ods_lingxing_concept_sellers_history")
+}
+
+model LingXingAccountUserHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  uid           Int
+  realname      String?
+  username      String?
+  mobile        String?
+  email         String?
+  loginNum      Int?     @default(0)
+  lastLoginTime String?
+  lastLoginIp   String?
+  status        Int?
+  createTime    String?
+  role          String?
+  seller        String?
+  isMaster      Int?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@index([uid])
+  @@map("ods_lingxing_account_users_history")
+}
+
+model LingXingMarketplaceHistory {
+  id            String   @id @default(uuid())
+  mid           Int
+  marketplaceId String
+  region        String?
+  awsRegion     String?
+  country       String?
+  code          String?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([mid])
+  @@index([marketplaceId])
+  @@map("ods_lingxing_marketplaces_history")
+}
+
+model LingXingWorldStateHistory {
+  id                  String   @id @default(uuid())
+  countryCode         String
+  stateOrProvinceName String
+  code                String
+  data                Json?
+  archived            Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  archivedAt          DateTime @default(now())
+  @@index([countryCode])
+  @@index([code])
+  @@map("ods_lingxing_world_states_history")
+}
+
+model LingXingLogisticsChannelHistory {
+  id                    String   @id @default(uuid())
+  accountId             String
+  channelId             BigInt
+  channelName           String?
+  methodId              String?
+  methodName            String?
+  billingType           Int?
+  volumeCalcParam       String?
+  zipCode               String?
+  validPeriod           Int?
+  remark                String?  @db.Text
+  enabled               Int?
+  lastModifyUid         BigInt?
+  gmtModified           String?
+  providerId            String?
+  providerName          String?
+  freight               Json?
+  sendPlaceCodes        Json?
+  receiveCountryCodes   Json?
+  isIncludeTax          Int?
+  isPointsBehind        Int?
+  pointsBehindCoeffient Decimal? @db.Decimal(10, 2)
+  channelData           Json?
+  archived              Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  archivedAt            DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_logistics_channels_history")
+}
+
+model LingXingHeadLogisticsProviderHistory {
+  id           String   @id @default(uuid())
+  accountId    String
+  providerId   String
+  name         String?
+  code         String?
+  enabled      Int?
+  logisticsType Int?
+  isAuth       Int?
+  supplierCode String?
+  supplierName String?
+  status       Int?
+  remark       String?  @db.Text
+  payMethod    Int?
+  contactName  String?
+  contactPhone String?
+  creatorId    BigInt?
+  creatorName  String?
+  createdAt    String?
+  providerData Json?
+  archived     Boolean  @default(false)
+  createdAtDb  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  archivedAt   DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_head_logistics_providers_history")
+}
+
+model LingXingTransportMethodHistory {
+  id                  String   @id @default(uuid())
+  accountId           String
+  methodId            String
+  code                String?
+  name                String?
+  isSystem            Boolean?
+  enabled             Int?
+  remark              String?  @db.Text
+  creatorId           BigInt?
+  creatorName         String?
+  updaterId           BigInt?
+  updaterName         String?
+  createdAt           String?
+  updatedAt           String?
+  transportMethodData Json?
+  archived            Boolean  @default(false)
+  createdAtDb         DateTime @default(now())
+  updatedAtDb         DateTime @updatedAt
+  archivedAt          DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_transport_methods_history")
+}
+
+model LingXingSupplierHistory {
+  id                      String   @id @default(uuid())
+  accountId               String
+  supplierId              Int
+  customerSupplierId      String?
+  supplierName            String?
+  supplierCode            String?
+  employees               Int?
+  url                     String?  @db.Text
+  contactPerson           String?
+  contactNumber           String?
+  qq                      String?
+  email                   String?
+  fax                     String?
+  accountName             String?
+  openBank                String?
+  bankCardNumber          String?
+  remark                  String?  @db.Text
+  purchaser               String?
+  isDelete                Int?
+  addressFull             String?  @db.Text
+  paymentMethodText       String?
+  pcName                  String?
+  settlementMethodText    String?
+  settlementDescription   String?  @db.Text
+  employeesText           String?
+  levelText               String?
+  creditCode              String?
+  prepayPercent           String?
+  paymentAccountGroup     Json?
+  periodConfigKey         String?
+  periodConfigText        String?
+  wid                     Int?
+  wName                   String?
+  templateId              String?
+  templateName            String?
+  purchaserId             Int?
+  purchaserIdText         String?
+  receiptWid              Int?
+  receiptWidText          String?
+  supplierData            Json?
+  archived                Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  archivedAt              DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_suppliers_history")
+}
+
+model LingXingPurchaserHistory {
+  id              String   @id @default(uuid())
+  accountId       String
+  purchaserId     Int
+  name            String?
+  address         String?  @db.Text
+  contactPhone    String?
+  contacter       String?
+  email           String?
+  purchaserData   Json?
+  archived        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  archivedAt      DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_purchasers_history")
+}
+
+model LingXingVcSellerHistory {
+  id            String   @id @default(uuid())
+  vcStoreId     String
+  accountId     String
+  accountIdLx   Int?
+  sellerId      String?
+  accountName   String?
+  region        String?
+  regionName    String?
+  name          String?
+  status        Int?
+  mid           Int?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_vc_sellers_history")
+}
+
+model LingXingVcListingHistory {
+  id                  String   @id @default(uuid())
+  vcStoreId           String
+  accountId           String
+  asin                String
+  smallMinImageUrl    String?  @db.Text
+  asinUrl             String?  @db.Text
+  msku                String?
+  upc                 String?
+  ean                String?
+  itemName            String?  @db.Text
+  parentAsin          String?
+  localSku            String?
+  localName           String?  @db.Text
+  categoryName        String?
+  brandId             String?
+  productId           String?
+  reviewsNum           String?
+  stars               String?
+  remark              String?  @db.Text
+  onSaleTime          String?
+  status              Int?
+  price               String?
+  priceCurrencyIcon   String?
+  classificationRank  Json?
+  displayGroupRank    Json?
+  principalList       Json?
+  data                Json?
+  archived            Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  archivedAt          DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_vc_listings_history")
+}
+
+model LingXingVcOrderHistory {
+  id                        String   @id @default(uuid())
+  localPoNumber             String
+  accountId                 String
+  orderId                   String?
+  purchaseOrderNumber       String?
+  customerOrderNumber       String?
+  vcStoreId                 String?
+  sellerName                String?
+  purchaseOrderType         Int?
+  purchaseOrderState        String?
+  purchaseOrderProcessState Int?
+  purchaseOrderDate         String?
+  ackStatus                 Int?
+  ackStatusDesc             String?
+  ackUpdateTime             String?
+  focusPartyId              String?
+  erpWarehouseName          String?
+  erpWarehouseId            String?
+  shipWindowTime            String?
+  shipWindowStart           String?
+  shipWindowsEnd            String?
+  totalPrice                String?
+  currencyCode              String?
+  currencyIcon              String?
+  itemAmount                Int?
+  remark                    String?  @db.Text
+  shipmentConfirmStatus     Int?
+  shipmentLabelStatus       Int?
+  printNum                  Int?
+  gmtCreate                 String?
+  gmtModified               String?
+  data                      Json?
+  orderDetail               Json?
+  archived                  Boolean  @default(false)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  archivedAt                DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_vc_orders_history")
+}
+
+model LingXingVcInvoiceHistory {
+  id                      String   @id @default(uuid())
+  orderNo                 String
+  accountId               String
+  invoiceId               String?
+  purchaseOrderNumber     String?
+  remark                  String?  @db.Text
+  shippingWid             String?
+  shippingWarehouseName   String?
+  shipmentTime            String?
+  shipmentUser            String?
+  status                  Int?
+  createUser              String?
+  createTime              String?
+  shipmentType            String?
+  statusName              String?
+  totalNum                Int?
+  estimatedPickupTime     String?
+  shipmentTypeName        String?
+  sourceType              Int?
+  invoiceModel            Int?
+  outboundDate            String?
+  gmtCreate               String?
+  gmtModified             String?
+  data                    Json?
+  invoiceDetail           Json?
+  archived                Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  archivedAt              DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_vc_invoices_history")
+}
+
+model LingXingWarehouseHistory {
+  id                  String   @id @default(uuid())
+  accountId           String
+  wid                 BigInt
+  name                String?
+  type                Int?
+  isDelete            String?
+  tCountryAreaName    String?
+  tStatus             Int?
+  tWarehouseCode      String?
+  tWarehouseName      String?
+  countryCode         String?
+  wpId                BigInt?
+  wpName              String?
+  warehouseData       Json?
+  archived            Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  archivedAt          DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_warehouses_history")
+}
+
+model LingXingWarehouseBinHistory {
+  id              String   @id @default(uuid())
+  accountId       String
+  binId           BigInt
+  wid             BigInt?
+  warehouseName   String?
+  storageBin      String?
+  whbStatus       String?
+  status          String?
+  type            String?
+  binData         Json?
+  archived        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  archivedAt      DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_warehouse_bins_history")
+}
+
+model LingXingFbaWarehouseDetailHistory {
+  id                      String   @id @default(uuid())
+  accountId               String
+  sellerSku               String?
+  fnsku                   String?
+  asin                    String
+  parentAsin              String?
+  productName             String?  @db.Text
+  name                    String   @db.Text
+  sku                     String?
+  spu                     String?
+  spuName                 String?
+  sid                     String
+  sellerName              String?
+  status                  String?
+  fulfillmentChannelType  String?
+  availableQuantity       Int?
+  reservedQuantity        Int?
+  inboundQuantity         Int?
+  totalQuantity           Int?
+  total                   Int?
+  availableTotal          Int?
+  cgPrice                 Decimal? @db.Decimal(10, 4)
+  fbaStorageQuantityList  Json?
+  fbaInventoryData        Json?
+  data                    Json?
+  archived                Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  archivedAt              DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_fba_warehouse_details_history")
+}
+
+model LingXingInventoryDetailHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  wid           String
+  sku           String
+  productId     BigInt?
+  quantity      Int?
+  purchasePrice Decimal? @db.Decimal(10, 4)
+  stockPrice    Decimal? @db.Decimal(10, 4)
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_inventory_details_history")
+}
+
+model LingXingInventoryBinDetailHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  wid           String
+  binId         String
+  productId     BigInt?
+  quantity      Int?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_inventory_bin_details_history")
+}
+
+model LingXingWmsOrderHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  woNumber    String
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_wms_orders_history")
+}
+
+model LingXingOverseasWarehouseStockOrderHistory {
+  id                 String   @id @default(uuid())
+  accountId          String
+  overseasOrderNo    String
+  data               Json?
+  archived           Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  archivedAt         DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_overseas_warehouse_stock_orders_history")
+}
+
+model LingXingFeeTypeHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  feeTypeId   String?
+  feeTypeName String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_fee_types_history")
+}
+
+model LingXingFeeDetailHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  feeDetailId String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_fee_details_history")
+}
+
+model LingXingRequestFundsOrderHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  orderSn     String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_request_funds_orders_history")
+}
+
+model LingXingRequestFundsPoolPurchaseHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  orderSn     String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_request_funds_pool_purchases_history")
+}
+
+model LingXingRequestFundsPoolInboundHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  orderSn     String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_request_funds_pool_inbounds_history")
+}
+
+model LingXingRequestFundsPoolPrepayHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  orderSn     String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_request_funds_pool_prepays_history")
+}
+
+model LingXingRequestFundsPoolLogisticsHistory {
+  id                String   @id @default(uuid())
+  accountId         String
+  deliveryOrderSn   String?
+  data              Json?
+  archived          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  archivedAt        DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_request_funds_pool_logistics_history")
+}
+
+model LingXingRequestFundsPoolCustomFeeHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  customFeeSn   String?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_request_funds_pool_custom_fees_history")
+}
+
+model LingXingRequestFundsPoolOtherFeeHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  orderSn     String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_request_funds_pool_other_fees_history")
+}
+
+model LingXingReceivableReportHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  sid         Int?
+  settleMonth String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_receivable_reports_history")
+}
+
+model LingXingReceivableReportDetailHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  sid         Int?
+  settleMonth String?
+  fid         String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_receivable_report_details_history")
+}
+
+model LingXingReceivableReportDetailInfoHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  sid           Int?
+  currencyCode  String?
+  settleMonth   String?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_receivable_report_detail_infos_history")
+}
+
+model LingXingSettlementSummaryHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  recordId    String
+  dateType    Int
+  settleDate  String
+  sid         Int?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_settlement_summaries_history")
+}
+
+model LingXingSettlementTransactionDetailHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  sid         Int
+  settleDate  String
+  uniqueKey   String
+  eventType   String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_settlement_transaction_details_history")
+}
+
+model LingXingInventoryLedgerDetailHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  sellerId      String
+  settleDate    String
+  uniqueMd5Idx  String
+  uniqueMd5     String
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_inventory_ledger_details_history")
+}
+
+model LingXingInventoryLedgerSummaryHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  sellerId      String
+  settleDate    String
+  rowKey        String
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_inventory_ledger_summaries_history")
+}
+
+model LingXingSettlementReportHistory {
+  id              String   @id @default(uuid())
+  accountId       String
+  sid             Int
+  settleDate      String
+  amazonOrderId   String   @default("")
+  shipmentId      String   @default("")
+  shipmentItemId  String   @default("")
+  msku            String   @default("")
+  data            Json?
+  archived        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  archivedAt      DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_settlement_reports_history")
+}
+
+model LingXingFbaCostStreamHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  shopName    String   @default("")
+  streamDate  String   @default("")
+  uniqueKey   String   @default("")
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_fba_cost_streams_history")
+}
+
+model LingXingAdsInvoiceHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  sid         Int      @default(0)
+  invoiceId   String   @default("")
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_ads_invoices_history")
+}
+
+model LingXingProfitReportOrderHistory {
+  id                    String   @id @default(uuid())
+  accountId             String
+  sid                   Int
+  postedDatetimeLocale  String
+  fid                   String
+  orderId               String
+  eventSource           String
+  sellerSku             String
+  data                  Json?
+  archived              Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  archivedAt            DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_profit_report_orders_history")
+}
+
+model LingXingProfitReportOrderTransactionHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  recordId    String
+  postedDate  String
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_profit_report_order_transactions_history")
+}
+
+model LingXingMskuProfitReportHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  msku        String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_msku_profit_reports_history")
+}
+
+model LingXingSellerProfitReportHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  sid         Int?
+  dataDate    String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_seller_profit_reports_history")
+}
+
+model LingXingAsinProfitReportHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  asin        String?
+  dataDate    String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_asin_profit_reports_history")
+}
+
+model LingXingParentAsinProfitReportHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  parentAsin  String?
+  dataDate    String?
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_parent_asin_profit_reports_history")
+}
+
+model LingXingLocalProductHistory {
+  id                    String   @id @default(uuid())
+  accountId             String
+  productId             Int
+  cid                   Int?
+  categoryName          String?
+  bid                   Int?
+  brandName             String?
+  sku                   String?
+  openStatus            Int?
+  skuIdentifier         String?
+  productName           String?
+  picUrl                String?  @db.Text
+  psId                  Int?
+  spu                   String?
+  cgDelivery            Int?
+  cgTransportCosts     Decimal? @db.Decimal(10, 2)
+  purchaseRemark        String?  @db.Text
+  cgPrice               Decimal? @db.Decimal(10, 4)
+  status                Int?
+  statusText            String?
+  isCombo               Int?
+  createTime            Int?
+  updateTime            Int?
+  productDeveloperUid   String?
+  productDeveloper      String?
+  cgOptUid              String?
+  cgOptUsername         String?
+  globalTags            Json?
+  supplierQuote         Json?
+  customFields          Json?
+  attribute             Json?
+  data                  Json?
+  productDetail         Json?
+  archived              Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  archivedAt            DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_local_products_history")
+}
+
+model LingXingAmazonOrderHistory {
+  id                      String   @id @default(uuid())
+  accountId               String
+  amazonOrderId           String
+  sid                     Int?
+  sellerName              String?
+  orderStatus             String?
+  orderTotalAmount        Decimal? @db.Decimal(10, 2)
+  orderTotalCurrencyCode  String?
+  fulfillmentChannel      String?
+  postalCode              String?
+  isReturn                Int?
+  isMcfOrder              Int?
+  isAssessed              Int?
+  isReplacedOrder         Int?
+  isReplacementOrder      Int?
+  isReturnOrder           Int?
+  salesChannel            String?
+  trackingNumber          String?
+  refundAmount            Decimal? @db.Decimal(10, 2)
+  purchaseDateLocal       String?
+  purchaseDateLocalUtc    String?
+  shipmentDate            String?
+  shipmentDateUtc         String?
+  shipmentDateLocal       String?
+  lastUpdateDate          String?
+  lastUpdateDateUtc       String?
+  postedDate              String?
+  postedDateUtc           String?
+  purchaseDate            String?
+  purchaseDateUtc         String?
+  earliestShipDate        String?
+  earliestShipDateUtc     String?
+  gmtModified             String?
+  gmtModifiedUtc          String?
+  orderData               Json?
+  orderDetail             Json?
+  archived                Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  archivedAt              DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_amazon_orders_history")
+}
+
+model LingXingAmazonListingHistory {
+  id           String   @id @default(uuid())
+  accountId    String
+  sid          Int
+  sellerSku    String
+  listingData  Json?
+  archived     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_amazon_listings_history")
+}
+
+model LingXingAmazonReportHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  reportType    String
+  sid           Int?
+  amazonOrderId String?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_amazon_reports_history")
+}
+
+model LingXingStoreSummarySalesHistory {
+  id         String   @id @default(uuid())
+  accountId  String
+  sid        Int
+  eventDate  String
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  archivedAt DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_store_summary_sales_history")
+}
+
+model LingXingReimbursementReportHistory {
+  id         String   @id @default(uuid())
+  accountId  String
+  sid        Int
+  eventDate  String
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  archivedAt DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_reimbursement_reports_history")
+}
+
+model LingXingPurchaseReportProductHistory {
+  id         String   @id @default(uuid())
+  accountId  String
+  eventDate  String
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  archivedAt DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_purchase_report_products_history")
+}
+
+model LingXingPurchaseReportSupplierHistory {
+  id         String   @id @default(uuid())
+  accountId  String
+  eventDate  String
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  archivedAt DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_purchase_report_suppliers_history")
+}
+
+model LingXingPurchaseReportBuyerHistory {
+  id         String   @id @default(uuid())
+  accountId  String
+  eventDate  String
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  archivedAt DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_purchase_report_buyers_history")
+}
+
+model LingXingReturnOrderAnalysisHistory {
+  id         String   @id @default(uuid())
+  accountId  String
+  eventDate  String
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  archivedAt DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_return_order_analyses_history")
+}
+
+model LingXingOperateLogHistory {
+  id           String   @id @default(uuid())
+  accountId    String
+  eventDate    String
+  summaryType  String
+  data         Json?
+  archived     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_operate_logs_history")
+}
+
+model LingXingFbaStorageFeeMonthHistory {
+  id         String   @id @default(uuid())
+  accountId  String
+  sid        Int
+  month      String
+  data       Json?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  archivedAt DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_fba_storage_fee_month_history")
+}
+
+model LingXingSalesReportHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  sid           Int
+  eventDate     String
+  asinType      Int
+  type          Int
+  totalRecords  Int?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_sales_reports_history")
+}
+
+model LingXingSalesReportItemHistory {
+  id            String   @id @default(uuid())
+  reportId      String
+  sid           Int?
+  rDate         String?
+  currencyCode  String?
+  sellerSku     String?
+  asin          String?
+  productName   String?  @db.Text
+  mapValue      Decimal? @db.Decimal(15, 2)
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([reportId])
+  @@map("ods_lingxing_sales_report_items_history")
+}
+
+model LingXingProductPerformanceHistory {
+  id                String   @id @default(uuid())
+  accountId         String
+  sidString         String
+  startDate         String
+  endDate           String
+  summaryField      String
+  totalRecords      Int?
+  data              Json?
+  archived          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  archivedAt        DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_product_performance_history")
+}
+
+model LingXingProductPerformancePageHistory {
+  id            String   @id @default(uuid())
+  performanceId String
+  pageOffset    Int
+  pageLength    Int
+  pageNumber    Int
+  total         Int?
+  data          Json
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([performanceId])
+  @@map("ods_lingxing_product_performance_pages_history")
+}
+
+model LingXingAsin360HourDataHistory {
+  id                String   @id @default(uuid())
+  accountId         String
+  sids              String
+  dateStart         String
+  dateEnd           String
+  summaryField      String
+  summaryFieldValue String
+  data              Json?
+  archived          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  archivedAt        DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_asin360_hour_data_history")
+}
+
+model LingXingMskuProfitStatisticsHistory {
+  id            String   @id @default(uuid())
+  accountId     String
+  sidString     String
+  startDate     String
+  endDate       String
+  currencyCode  String?
+  mids          Json?
+  sids          Json?
+  searchField   String?
+  searchValue   Json?
+  totalRecords  Int?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_msku_profit_statistics_history")
+}
+
+model LingXingMskuProfitStatisticsItemHistory {
+  id            String   @id @default(uuid())
+  statisticsId  String
+  msku          String?
+  asin          String?
+  sid           Int?
+  dataDate      String?
+  data          Json?
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime @default(now())
+  @@index([statisticsId])
+  @@map("ods_lingxing_msku_profit_statistics_items_history")
+}
+
+model LingXingStorageReportLocalAggregateHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  startDate   String
+  endDate     String
+  sysWid      String   @default("")
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_storage_report_local_aggregate_history")
+}
+
+model LingXingStorageReportLocalDetailHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  startDate   String
+  endDate     String
+  sysWid      String   @default("")
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_storage_report_local_detail_history")
+}
+
+model LingXingStorageReportOverseasAggregateHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  startDate   String
+  endDate     String
+  sysWid      String   @default("")
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_storage_report_overseas_aggregate_history")
+}
+
+model LingXingStorageReportOverseasDetailHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  startDate   String
+  endDate     String
+  sysWid      String   @default("")
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_storage_report_overseas_detail_history")
+}
+
+model LingXingStorageReportFbaGatherHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  startDate   String
+  endDate     String
+  sellerId    String   @default("")
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_storage_report_fba_gather_history")
+}
+
+model LingXingStorageReportFbaDetailHistory {
+  id          String   @id @default(uuid())
+  accountId   String
+  startDate   String
+  endDate     String
+  sellerId    String   @default("")
+  data        Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  archivedAt  DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_storage_report_fba_detail_history")
+}
+
+model LingXingKeywordRankHistory {
+  id        String   @id @default(uuid())
+  accountId String
+  mid       Int?
+  startDate String?
+  endDate   String?
+  data      Json
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  archivedAt DateTime @default(now())
+  @@index([accountId])
+  @@map("ods_lingxing_keyword_ranks_history")
+}

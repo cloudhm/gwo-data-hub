@@ -1,4 +1,5 @@
 import prisma from '../../../config/database.js';
+import { moveToHistoryAndDelete } from '../lingxingArchiveHelper.js';
 import lingXingAmazonService from '../amazon/lingXingAmazonService.js';
 import lingXingReportService from '../reports/lingXingReportService.js';
 import lingXingFinanceService from '../finance/lingXingFinanceService.js';
@@ -185,65 +186,66 @@ const FULL_TASK_REGISTRY = {
 };
 
 /**
- * 全量同步前需软删除（归档）的领星表：taskType -> [{ model: Prisma 模型名(camelCase), accountField: 账户字段名，null 表示全表归档 }]
+ * 全量同步前需归档的领星表：taskType -> [{ model, accountField, historyModel }]
+ * 有 historyModel 时：将符合 where 的行迁移到 History 表后删除，避免唯一键冲突；无 historyModel 时回退为 updateMany(archived: true)。
  */
 const FULL_SYNC_ARCHIVE_MAP = {
-  sellerLists: [{ model: 'lingXingSeller', accountField: 'accountId' }],
-  conceptSellerLists: [{ model: 'lingXingConceptSeller', accountField: 'accountId' }],
-  accountUsers: [{ model: 'lingXingAccountUser', accountField: 'accountId' }],
-  marketplaces: [{ model: 'lingXingMarketplace', accountField: null }],
-  worldStates: [{ model: 'lingXingWorldState', accountField: null }],
-  channels: [{ model: 'lingXingLogisticsChannel', accountField: 'accountId' }],
-  headLogisticsProviders: [{ model: 'lingXingHeadLogisticsProvider', accountField: 'accountId' }],
-  transportMethods: [{ model: 'lingXingTransportMethod', accountField: 'accountId' }],
-  suppliers: [{ model: 'lingXingSupplier', accountField: 'accountId' }],
-  purchasers: [{ model: 'lingXingPurchaser', accountField: 'accountId' }],
-  vcSellers: [{ model: 'lingXingVcSeller', accountField: 'accountId' }],
-  vcListings: [{ model: 'lingXingVcListing', accountField: 'accountId' }],
-  vcOrdersFull: [{ model: 'lingXingVcOrder', accountField: 'accountId' }],
-  vcInvoicesFull: [{ model: 'lingXingVcInvoice', accountField: 'accountId' }],
-  warehouses: [{ model: 'lingXingWarehouse', accountField: 'accountId' }],
-  warehouseBins: [{ model: 'lingXingWarehouseBin', accountField: 'accountId' }],
-  fbaWarehouseDetails: [{ model: 'lingXingFbaWarehouseDetail', accountField: 'accountId' }],
-  inventoryDetails: [{ model: 'lingXingInventoryDetail', accountField: 'accountId' }],
-  inventoryBinDetails: [{ model: 'lingXingInventoryBinDetail', accountField: 'accountId' }],
-  wmsOrders: [{ model: 'lingXingWmsOrder', accountField: 'accountId' }],
-  overseasWarehouseStockOrders: [{ model: 'lingXingOverseasWarehouseStockOrder', accountField: 'accountId' }],
-  feeTypes: [{ model: 'lingXingFeeType', accountField: 'accountId' }],
-  feeDetailsFull: [{ model: 'lingXingFeeDetail', accountField: 'accountId' }],
-  requestFundsOrdersFull: [{ model: 'lingXingRequestFundsOrder', accountField: 'accountId' }],
-  requestFundsPoolPurchase: [{ model: 'lingXingRequestFundsPoolPurchase', accountField: 'accountId' }],
-  requestFundsPoolInbound: [{ model: 'lingXingRequestFundsPoolInbound', accountField: 'accountId' }],
-  requestFundsPoolPrepay: [{ model: 'lingXingRequestFundsPoolPrepay', accountField: 'accountId' }],
-  requestFundsPoolLogistics: [{ model: 'lingXingRequestFundsPoolLogistics', accountField: 'accountId' }],
-  requestFundsPoolCustomFee: [{ model: 'lingXingRequestFundsPoolCustomFee', accountField: 'accountId' }],
-  requestFundsPoolOtherFee: [{ model: 'lingXingRequestFundsPoolOtherFee', accountField: 'accountId' }],
-  receivableReport: [{ model: 'lingXingReceivableReport', accountField: 'accountId' }],
-  receivableReportDetail: [{ model: 'lingXingReceivableReportDetail', accountField: 'accountId' }],
-  receivableReportDetailInfo: [{ model: 'lingXingReceivableReportDetailInfo', accountField: 'accountId' }],
-  settlementSummaryFull: [{ model: 'lingXingSettlementSummary', accountField: 'accountId' }],
-  settlementTransactionDetailFull: [{ model: 'lingXingSettlementTransactionDetail', accountField: 'accountId' }],
-  inventoryLedgerDetailFull: [{ model: 'lingXingInventoryLedgerDetail', accountField: 'accountId' }],
-  inventoryLedgerSummaryFull: [{ model: 'lingXingInventoryLedgerSummary', accountField: 'accountId' }],
-  settlementReportFull: [{ model: 'lingXingSettlementReport', accountField: 'accountId' }],
-  fbaCostStreamFull: [{ model: 'lingXingFbaCostStream', accountField: 'accountId' }],
-  adsInvoiceFull: [{ model: 'lingXingAdsInvoice', accountField: 'accountId' }],
-  profitReportOrderFull: [{ model: 'lingXingProfitReportOrder', accountField: 'accountId' }],
-  profitReportOrderTransactionFull: [{ model: 'lingXingProfitReportOrderTransaction', accountField: 'accountId' }],
-  mskuProfitReport: [{ model: 'lingXingMskuProfitReport', accountField: 'accountId' }],
-  sellerProfitReport: [{ model: 'lingXingSellerProfitReport', accountField: 'accountId' }],
-  localProductsFull: [{ model: 'lingXingLocalProduct', accountField: 'accountId' }],
-  amazonOrdersFull: [{ model: 'lingXingAmazonOrder', accountField: 'accountId' }],
-  listings: [{ model: 'lingXingAmazonListing', accountField: 'accountId' }],
-  allOrdersReportFull: [{ model: 'lingXingAmazonReport', accountField: 'accountId' }],
-  storeSummarySalesFull: [{ model: 'lingXingStoreSummarySales', accountField: 'accountId' }],
-  reimbursementReportFull: [{ model: 'lingXingReimbursementReport', accountField: 'accountId' }],
-  purchaseReportProductFull: [{ model: 'lingXingPurchaseReportProduct', accountField: 'accountId' }],
-  purchaseReportSupplierFull: [{ model: 'lingXingPurchaseReportSupplier', accountField: 'accountId' }],
-  purchaseReportBuyerFull: [{ model: 'lingXingPurchaseReportBuyer', accountField: 'accountId' }],
-  returnOrderAnalysisFull: [{ model: 'lingXingReturnOrderAnalysis', accountField: 'accountId' }],
-  operateLogFull: [{ model: 'lingXingOperateLog', accountField: 'accountId' }],
-  fbaStorageFeeMonthFull: [{ model: 'lingXingFbaStorageFeeMonth', accountField: 'accountId' }]
+  sellerLists: [{ model: 'lingXingSeller', accountField: 'accountId', historyModel: 'lingXingSellerHistory' }],
+  conceptSellerLists: [{ model: 'lingXingConceptSeller', accountField: 'accountId', historyModel: 'lingXingConceptSellerHistory' }],
+  accountUsers: [{ model: 'lingXingAccountUser', accountField: 'accountId', historyModel: 'lingXingAccountUserHistory' }],
+  marketplaces: [{ model: 'lingXingMarketplace', accountField: null, historyModel: 'lingXingMarketplaceHistory' }],
+  worldStates: [{ model: 'lingXingWorldState', accountField: null, historyModel: 'lingXingWorldStateHistory' }],
+  channels: [{ model: 'lingXingLogisticsChannel', accountField: 'accountId', historyModel: 'lingXingLogisticsChannelHistory' }],
+  headLogisticsProviders: [{ model: 'lingXingHeadLogisticsProvider', accountField: 'accountId', historyModel: 'lingXingHeadLogisticsProviderHistory' }],
+  transportMethods: [{ model: 'lingXingTransportMethod', accountField: 'accountId', historyModel: 'lingXingTransportMethodHistory' }],
+  suppliers: [{ model: 'lingXingSupplier', accountField: 'accountId', historyModel: 'lingXingSupplierHistory' }],
+  purchasers: [{ model: 'lingXingPurchaser', accountField: 'accountId', historyModel: 'lingXingPurchaserHistory' }],
+  vcSellers: [{ model: 'lingXingVcSeller', accountField: 'accountId', historyModel: 'lingXingVcSellerHistory' }],
+  vcListings: [{ model: 'lingXingVcListing', accountField: 'accountId', historyModel: 'lingXingVcListingHistory' }],
+  vcOrdersFull: [{ model: 'lingXingVcOrder', accountField: 'accountId', historyModel: 'lingXingVcOrderHistory' }],
+  vcInvoicesFull: [{ model: 'lingXingVcInvoice', accountField: 'accountId', historyModel: 'lingXingVcInvoiceHistory' }],
+  warehouses: [{ model: 'lingXingWarehouse', accountField: 'accountId', historyModel: 'lingXingWarehouseHistory' }],
+  warehouseBins: [{ model: 'lingXingWarehouseBin', accountField: 'accountId', historyModel: 'lingXingWarehouseBinHistory' }],
+  fbaWarehouseDetails: [{ model: 'lingXingFbaWarehouseDetail', accountField: 'accountId', historyModel: 'lingXingFbaWarehouseDetailHistory' }],
+  inventoryDetails: [{ model: 'lingXingInventoryDetail', accountField: 'accountId', historyModel: 'lingXingInventoryDetailHistory' }],
+  inventoryBinDetails: [{ model: 'lingXingInventoryBinDetail', accountField: 'accountId', historyModel: 'lingXingInventoryBinDetailHistory' }],
+  wmsOrders: [{ model: 'lingXingWmsOrder', accountField: 'accountId', historyModel: 'lingXingWmsOrderHistory' }],
+  overseasWarehouseStockOrders: [{ model: 'lingXingOverseasWarehouseStockOrder', accountField: 'accountId', historyModel: 'lingXingOverseasWarehouseStockOrderHistory' }],
+  feeTypes: [{ model: 'lingXingFeeType', accountField: 'accountId', historyModel: 'lingXingFeeTypeHistory' }],
+  feeDetailsFull: [{ model: 'lingXingFeeDetail', accountField: 'accountId', historyModel: 'lingXingFeeDetailHistory' }],
+  requestFundsOrdersFull: [{ model: 'lingXingRequestFundsOrder', accountField: 'accountId', historyModel: 'lingXingRequestFundsOrderHistory' }],
+  requestFundsPoolPurchase: [{ model: 'lingXingRequestFundsPoolPurchase', accountField: 'accountId', historyModel: 'lingXingRequestFundsPoolPurchaseHistory' }],
+  requestFundsPoolInbound: [{ model: 'lingXingRequestFundsPoolInbound', accountField: 'accountId', historyModel: 'lingXingRequestFundsPoolInboundHistory' }],
+  requestFundsPoolPrepay: [{ model: 'lingXingRequestFundsPoolPrepay', accountField: 'accountId', historyModel: 'lingXingRequestFundsPoolPrepayHistory' }],
+  requestFundsPoolLogistics: [{ model: 'lingXingRequestFundsPoolLogistics', accountField: 'accountId', historyModel: 'lingXingRequestFundsPoolLogisticsHistory' }],
+  requestFundsPoolCustomFee: [{ model: 'lingXingRequestFundsPoolCustomFee', accountField: 'accountId', historyModel: 'lingXingRequestFundsPoolCustomFeeHistory' }],
+  requestFundsPoolOtherFee: [{ model: 'lingXingRequestFundsPoolOtherFee', accountField: 'accountId', historyModel: 'lingXingRequestFundsPoolOtherFeeHistory' }],
+  receivableReport: [{ model: 'lingXingReceivableReport', accountField: 'accountId', historyModel: 'lingXingReceivableReportHistory' }],
+  receivableReportDetail: [{ model: 'lingXingReceivableReportDetail', accountField: 'accountId', historyModel: 'lingXingReceivableReportDetailHistory' }],
+  receivableReportDetailInfo: [{ model: 'lingXingReceivableReportDetailInfo', accountField: 'accountId', historyModel: 'lingXingReceivableReportDetailInfoHistory' }],
+  settlementSummaryFull: [{ model: 'lingXingSettlementSummary', accountField: 'accountId', historyModel: 'lingXingSettlementSummaryHistory' }],
+  settlementTransactionDetailFull: [{ model: 'lingXingSettlementTransactionDetail', accountField: 'accountId', historyModel: 'lingXingSettlementTransactionDetailHistory' }],
+  inventoryLedgerDetailFull: [{ model: 'lingXingInventoryLedgerDetail', accountField: 'accountId', historyModel: 'lingXingInventoryLedgerDetailHistory' }],
+  inventoryLedgerSummaryFull: [{ model: 'lingXingInventoryLedgerSummary', accountField: 'accountId', historyModel: 'lingXingInventoryLedgerSummaryHistory' }],
+  settlementReportFull: [{ model: 'lingXingSettlementReport', accountField: 'accountId', historyModel: 'lingXingSettlementReportHistory' }],
+  fbaCostStreamFull: [{ model: 'lingXingFbaCostStream', accountField: 'accountId', historyModel: 'lingXingFbaCostStreamHistory' }],
+  adsInvoiceFull: [{ model: 'lingXingAdsInvoice', accountField: 'accountId', historyModel: 'lingXingAdsInvoiceHistory' }],
+  profitReportOrderFull: [{ model: 'lingXingProfitReportOrder', accountField: 'accountId', historyModel: 'lingXingProfitReportOrderHistory' }],
+  profitReportOrderTransactionFull: [{ model: 'lingXingProfitReportOrderTransaction', accountField: 'accountId', historyModel: 'lingXingProfitReportOrderTransactionHistory' }],
+  mskuProfitReport: [{ model: 'lingXingMskuProfitReport', accountField: 'accountId', historyModel: 'lingXingMskuProfitReportHistory' }],
+  sellerProfitReport: [{ model: 'lingXingSellerProfitReport', accountField: 'accountId', historyModel: 'lingXingSellerProfitReportHistory' }],
+  localProductsFull: [{ model: 'lingXingLocalProduct', accountField: 'accountId', historyModel: 'lingXingLocalProductHistory' }],
+  amazonOrdersFull: [{ model: 'lingXingAmazonOrder', accountField: 'accountId', historyModel: 'lingXingAmazonOrderHistory' }],
+  listings: [{ model: 'lingXingAmazonListing', accountField: 'accountId', historyModel: 'lingXingAmazonListingHistory' }],
+  allOrdersReportFull: [{ model: 'lingXingAmazonReport', accountField: 'accountId', historyModel: 'lingXingAmazonReportHistory' }],
+  storeSummarySalesFull: [{ model: 'lingXingStoreSummarySales', accountField: 'accountId', historyModel: 'lingXingStoreSummarySalesHistory' }],
+  reimbursementReportFull: [{ model: 'lingXingReimbursementReport', accountField: 'accountId', historyModel: 'lingXingReimbursementReportHistory' }],
+  purchaseReportProductFull: [{ model: 'lingXingPurchaseReportProduct', accountField: 'accountId', historyModel: 'lingXingPurchaseReportProductHistory' }],
+  purchaseReportSupplierFull: [{ model: 'lingXingPurchaseReportSupplier', accountField: 'accountId', historyModel: 'lingXingPurchaseReportSupplierHistory' }],
+  purchaseReportBuyerFull: [{ model: 'lingXingPurchaseReportBuyer', accountField: 'accountId', historyModel: 'lingXingPurchaseReportBuyerHistory' }],
+  returnOrderAnalysisFull: [{ model: 'lingXingReturnOrderAnalysis', accountField: 'accountId', historyModel: 'lingXingReturnOrderAnalysisHistory' }],
+  operateLogFull: [{ model: 'lingXingOperateLog', accountField: 'accountId', historyModel: 'lingXingOperateLogHistory' }],
+  fbaStorageFeeMonthFull: [{ model: 'lingXingFbaStorageFeeMonth', accountField: 'accountId', historyModel: 'lingXingFbaStorageFeeMonthHistory' }]
 };
 
 /**
@@ -254,21 +256,29 @@ const FULL_SYNC_ARCHIVE_MAP = {
  */
 class LingXingUnifiedSyncService {
   /**
-   * 全量同步前将对应表的数据归档（archived = true）
+   * 全量同步前将对应表的数据迁移到 History 表后删除（或回退为软删除）
+   * 有 historyModel 时：迁移到 xxx_history 再删除主表，避免唯一键冲突；否则 updateMany(archived: true)
    * @param {string} accountId - 账户ID
    * @param {string} taskType - 任务类型
    */
   async archiveBeforeFullSync(accountId, taskType) {
     const configs = FULL_SYNC_ARCHIVE_MAP[taskType];
     if (!configs || !Array.isArray(configs)) return;
-    for (const { model, accountField } of configs) {
+    for (const { model, accountField, historyModel } of configs) {
       const client = prisma[model];
       if (!client || typeof client.updateMany !== 'function') continue;
       try {
         const where = accountField ? { [accountField]: accountId } : {};
-        const result = await client.updateMany({ where, data: { archived: true } });
-        if (result.count > 0) {
-          console.log(`${LOG_PREFIX} [full] [${taskType}] 已归档 ${model} accountId=${accountId} 共 ${result.count} 条`);
+        if (historyModel && prisma[historyModel]) {
+          const { moved, deleted } = await moveToHistoryAndDelete(prisma, model, historyModel, where);
+          if (moved > 0) {
+            console.log(`${LOG_PREFIX} [full] [${taskType}] 已迁移到 History 并删除 ${model} accountId=${accountId} 共 ${moved} 条 (deleted=${deleted})`);
+          }
+        } else {
+          const result = await client.updateMany({ where, data: { archived: true } });
+          if (result.count > 0) {
+            console.log(`${LOG_PREFIX} [full] [${taskType}] 已归档(软删除) ${model} accountId=${accountId} 共 ${result.count} 条`);
+          }
         }
       } catch (err) {
         console.warn(`${LOG_PREFIX} [full] [${taskType}] 归档 ${model} 失败:`, err?.message || err);

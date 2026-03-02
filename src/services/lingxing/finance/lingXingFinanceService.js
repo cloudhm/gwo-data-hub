@@ -1,4 +1,5 @@
 import prisma from '../../../config/database.js';
+import { moveToHistoryAndDelete } from '../lingxingArchiveHelper.js';
 import LingXingApiClient from '../lingxingApiClient.js';
 import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 import lingXingSyncStateService from '../sync/lingXingSyncStateService.js';
@@ -3843,10 +3844,14 @@ class LingXingFinanceService extends LingXingApiClient {
       if (!prisma.lingXingSettlementSummary) return;
       const day = String(settleDate).trim().slice(0, 10);
       const dateTypeNum = Number(dateType);
-      await prisma.lingXingSettlementSummary.updateMany({
-        where: { accountId, settleDate: day, dateType: dateTypeNum },
-        data: { archived: true, updatedAt: new Date() }
-      });
+      if (prisma.lingXingSettlementSummaryHistory) {
+        await moveToHistoryAndDelete(prisma, 'lingXingSettlementSummary', 'lingXingSettlementSummaryHistory', { accountId, settleDate: day, dateType: dateTypeNum });
+      } else {
+        await prisma.lingXingSettlementSummary.updateMany({
+          where: { accountId, settleDate: day, dateType: dateTypeNum },
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
       for (const row of records) {
         const recordId = row.id != null ? String(row.id) : '';
         if (!recordId) continue;
@@ -4058,10 +4063,14 @@ class LingXingFinanceService extends LingXingApiClient {
 
       if (serviceFeeList.length > 0) {
         const eventTypeVal = serviceFeeList[0].eventType || 'ServiceFeeEventList';
-        await prisma.lingXingSettlementTransactionDetail.updateMany({
-          where: { accountId, sid: sidVal, settleDate: day, eventType: eventTypeVal },
-          data: { archived: true, updatedAt: new Date() }
-        });
+        if (prisma.lingXingSettlementTransactionDetailHistory) {
+          await moveToHistoryAndDelete(prisma, 'lingXingSettlementTransactionDetail', 'lingXingSettlementTransactionDetailHistory', { accountId, sid: sidVal, settleDate: day, eventType: eventTypeVal });
+        } else {
+          await prisma.lingXingSettlementTransactionDetail.updateMany({
+            where: { accountId, sid: sidVal, settleDate: day, eventType: eventTypeVal },
+            data: { archived: true, updatedAt: new Date() }
+          });
+        }
         for (let i = 0; i < serviceFeeList.length; i++) {
           const row = serviceFeeList[i];
           const uniqueKey = (row.uniqueKey != null && String(row.uniqueKey).trim()) ? String(row.uniqueKey).trim() : `sf_${row.id ?? i}_${i}`;
@@ -5061,13 +5070,20 @@ class LingXingFinanceService extends LingXingApiClient {
     try {
       if (!prisma.lingXingProfitReportOrder) return;
       const dateStr = String(day).trim().slice(0, 10);
-      await prisma.lingXingProfitReportOrder.updateMany({
-        where: {
+      if (prisma.lingXingProfitReportOrderHistory) {
+        await moveToHistoryAndDelete(prisma, 'lingXingProfitReportOrder', 'lingXingProfitReportOrderHistory', {
           accountId,
           postedDatetimeLocale: { startsWith: dateStr }
-        },
-        data: { archived: true, updatedAt: new Date() }
-      });
+        });
+      } else {
+        await prisma.lingXingProfitReportOrder.updateMany({
+          where: {
+            accountId,
+            postedDatetimeLocale: { startsWith: dateStr }
+          },
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
       for (const row of orders) {
         const sid = row.sid !== undefined && row.sid !== null ? parseInt(row.sid) : 0;
         const posted = (row.posted_datetime_locale != null ? String(row.posted_datetime_locale) : '').trim();
@@ -5262,10 +5278,14 @@ class LingXingFinanceService extends LingXingApiClient {
         return;
       }
       const day = String(postedDate).trim().slice(0, 10);
-      await prisma.lingXingProfitReportOrderTransaction.updateMany({
-        where: { accountId, postedDate: day },
-        data: { archived: true, updatedAt: new Date() }
-      });
+      if (prisma.lingXingProfitReportOrderTransactionHistory) {
+        await moveToHistoryAndDelete(prisma, 'lingXingProfitReportOrderTransaction', 'lingXingProfitReportOrderTransactionHistory', { accountId, postedDate: day });
+      } else {
+        await prisma.lingXingProfitReportOrderTransaction.updateMany({
+          where: { accountId, postedDate: day },
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
       for (const row of records) {
         const recordId = (row.id != null ? String(row.id) : '').trim();
         if (!recordId) continue;
@@ -5473,10 +5493,14 @@ class LingXingFinanceService extends LingXingApiClient {
     try {
       if (!prisma.lingXingAsinProfitReport) return;
       const day = String(dataDate).trim().slice(0, 10);
-      await prisma.lingXingAsinProfitReport.updateMany({
-        where: { accountId, dataDate: day },
-        data: { archived: true, updatedAt: new Date() }
-      });
+      if (prisma.lingXingAsinProfitReportHistory) {
+        await moveToHistoryAndDelete(prisma, 'lingXingAsinProfitReport', 'lingXingAsinProfitReportHistory', { accountId, dataDate: day });
+      } else {
+        await prisma.lingXingAsinProfitReport.updateMany({
+          where: { accountId, dataDate: day },
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
       for (const report of reports) {
         await prisma.lingXingAsinProfitReport.create({
           data: {
@@ -5528,10 +5552,14 @@ class LingXingFinanceService extends LingXingApiClient {
     try {
       if (!prisma.lingXingParentAsinProfitReport) return;
       const day = String(dataDate).trim().slice(0, 10);
-      await prisma.lingXingParentAsinProfitReport.updateMany({
-        where: { accountId, dataDate: day },
-        data: { archived: true, updatedAt: new Date() }
-      });
+      if (prisma.lingXingParentAsinProfitReportHistory) {
+        await moveToHistoryAndDelete(prisma, 'lingXingParentAsinProfitReport', 'lingXingParentAsinProfitReportHistory', { accountId, dataDate: day });
+      } else {
+        await prisma.lingXingParentAsinProfitReport.updateMany({
+          where: { accountId, dataDate: day },
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
       for (const report of reports) {
         await prisma.lingXingParentAsinProfitReport.create({
           data: {
@@ -5610,10 +5638,14 @@ class LingXingFinanceService extends LingXingApiClient {
     try {
       if (!prisma.lingXingSellerProfitReport) return;
       const day = String(dataDate).trim().slice(0, 10);
-      await prisma.lingXingSellerProfitReport.updateMany({
-        where: { accountId, dataDate: day },
-        data: { archived: true, updatedAt: new Date() }
-      });
+      if (prisma.lingXingSellerProfitReportHistory) {
+        await moveToHistoryAndDelete(prisma, 'lingXingSellerProfitReport', 'lingXingSellerProfitReportHistory', { accountId, dataDate: day });
+      } else {
+        await prisma.lingXingSellerProfitReport.updateMany({
+          where: { accountId, dataDate: day },
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
       for (const report of reports) {
         await prisma.lingXingSellerProfitReport.create({
           data: {
