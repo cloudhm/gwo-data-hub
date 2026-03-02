@@ -5338,8 +5338,16 @@ class LingXingFinanceService extends LingXingApiClient {
     const { pageSize = 1000, delayBetweenPages = 500, onProgress = null, defaultLookbackDays = 90 } = options;
     const actualPageSize = Math.min(pageSize, 1000);
     try {
-      const startDate = listParams.start_date || listParams.startDate;
-      const endDate = listParams.end_date || listParams.endDate;
+      let startDate = listParams.start_date || listParams.startDate;
+      let endDate = listParams.end_date || listParams.endDate;
+      if (!startDate || !endDate) {
+        const lookback = listParams.defaultLookbackDays ?? defaultLookbackDays;
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - lookback);
+        endDate = endDate || end.toISOString().slice(0, 10);
+        startDate = startDate || start.toISOString().slice(0, 10);
+      }
       if (!startDate || !endDate) throw new Error('start_date/startDate 与 end_date/endDate 为必填');
       const days = this._getDaysBetween(startDate, endDate);
       const searchDateField = listParams.searchDateField || listParams.search_date_field || 'posted_date_locale';

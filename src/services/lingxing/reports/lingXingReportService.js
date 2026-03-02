@@ -411,7 +411,7 @@ class LingXingReportService extends LingXingApiClient {
    *   - start_date: 报表时间，格式：Y-m-d，闭区间（必填）
    *   - end_date: 报表时间，格式：Y-m-d，闭区间（必填）
    *   - offset: 分页偏移量，默认0（可选）
-   *   - length: 分页长度，默认1000（可选）
+   *   - length: 分页长度，默认100（该接口上限100）（可选）
    * @returns {Promise<Object>} { data: [], total: 0 }
    */
   async getStoreSummarySales(accountId, params = {}) {
@@ -423,12 +423,13 @@ class LingXingReportService extends LingXingApiClient {
     if (!dateRegex.test(params.start_date) || !dateRegex.test(params.end_date)) {
       throw new Error('日期格式错误，应为 Y-m-d 格式');
     }
+    const maxLength = 100;
     const requestParams = {
       sid: parseInt(params.sid),
       start_date: params.start_date,
       end_date: params.end_date,
       ...(params.offset !== undefined && { offset: parseInt(params.offset) }),
-      ...(params.length !== undefined && { length: parseInt(params.length) })
+      ...(params.length !== undefined && { length: Math.min(parseInt(params.length), maxLength) })
     };
     const response = await this.post(account, '/erp/sc/data/sales_report/sales', requestParams, {
       successCode: [0, 200, '200']
@@ -477,7 +478,7 @@ class LingXingReportService extends LingXingApiClient {
   async fetchAllStoreSummarySalesByDay(accountId, listParams = {}, options = {}) {
     const { start_date, end_date } = listParams;
     if (!start_date || !end_date) throw new Error('start_date 和 end_date 为必填');
-    const pageSize = options.pageSize ?? 1000;
+    const pageSize = Math.min(options.pageSize ?? 100, 100);
     const delayBetweenDays = options.delayBetweenDays ?? 500;
     const delayBetweenShops = options.delayBetweenShops ?? 1000;
 
@@ -2176,15 +2177,16 @@ class LingXingReportService extends LingXingApiClient {
 
   /**
    * 库存报表-本地仓-新报表-明细（分页）
-   * POST /inventory/center/openapi/storageReport/local/detail/page 令牌桶 3
+   * POST /inventory/center/openapi/storageReport/local/detail/page 令牌桶 3，分页条数最大 100
    */
   async getStorageReportLocalDetailPage(accountId, params = {}) {
     const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
     if (!account) throw new Error(`领星账户不存在: ${accountId}`);
     if (!params.start_date || !params.end_date) throw new Error('start_date、end_date 为必填');
+    const maxLength = 100;
     const body = {
       offset: params.offset != null ? params.offset : 1,
-      length: params.length != null ? params.length : 500,
+      length: params.length != null ? Math.min(parseInt(params.length), maxLength) : maxLength,
       start_date: params.start_date,
       end_date: params.end_date
     };
@@ -2213,7 +2215,7 @@ class LingXingReportService extends LingXingApiClient {
   async fetchAllStorageReportLocalDetail(accountId, params = {}, options = {}) {
     const { start_date, end_date } = params;
     if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
-    const pageSize = Math.min(options.pageSize || 500, 500);
+    const pageSize = Math.min(options.pageSize ?? 100, 100);
     const days = this._getDaysBetween(start_date, end_date);
     let sysWidList = [''];
     if (params.sys_wid !== undefined && params.sys_wid !== null && String(params.sys_wid).trim() !== '') {
@@ -2323,15 +2325,16 @@ class LingXingReportService extends LingXingApiClient {
 
   /**
    * 库存报表-海外仓-新报表-明细（分页）
-   * POST /inventory/center/openapi/storageReport/overseas/detail/page 令牌桶 3
+   * POST /inventory/center/openapi/storageReport/overseas/detail/page 令牌桶 3，分页条数最大 100
    */
   async getStorageReportOverseasDetailPage(accountId, params = {}) {
     const account = await prisma.lingXingAccount.findUnique({ where: { id: accountId } });
     if (!account) throw new Error(`领星账户不存在: ${accountId}`);
     if (!params.start_date || !params.end_date) throw new Error('start_date、end_date 为必填');
+    const maxLength = 100;
     const body = {
       offset: params.offset != null ? params.offset : 1,
-      length: params.length != null ? params.length : 500,
+      length: params.length != null ? Math.min(parseInt(params.length), maxLength) : maxLength,
       start_date: params.start_date,
       end_date: params.end_date
     };
@@ -2360,7 +2363,7 @@ class LingXingReportService extends LingXingApiClient {
   async fetchAllStorageReportOverseasDetail(accountId, params = {}, options = {}) {
     const { start_date, end_date } = params;
     if (!start_date || !end_date) throw new Error('start_date、end_date 为必填');
-    const pageSize = Math.min(options.pageSize || 500, 500);
+    const pageSize = Math.min(options.pageSize ?? 100, 100);
     const days = this._getDaysBetween(start_date, end_date);
     let sysWidList = [''];
     if (params.sys_wid !== undefined && params.sys_wid !== null && String(params.sys_wid).trim() !== '') {

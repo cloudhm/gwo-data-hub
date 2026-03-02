@@ -1,5 +1,6 @@
 import prisma from '../../../config/database.js';
 import LingXingApiClient from '../lingxingApiClient.js';
+import { moveToHistoryAndDelete } from '../lingxingArchiveHelper.js';
 import { runAccountLevelIncrementalSync } from '../sync/lingXingIncrementalRunner.js';
 
 /**
@@ -246,6 +247,9 @@ class LingXingPurchaseService extends LingXingApiClient {
     if (params.start_date !== undefined) requestParams.start_date = params.start_date;
     if (params.end_date !== undefined) requestParams.end_date = params.end_date;
     if (params.time_type !== undefined) requestParams.time_type = parseInt(params.time_type);
+    if (requestParams.start_date != null && requestParams.end_date != null && requestParams.time_type === undefined) {
+      requestParams.time_type = 1;
+    }
     if (params.sids !== undefined) requestParams.sids = typeof params.sids === 'number' ? String(params.sids) : params.sids;
     if (params.search_field !== undefined) requestParams.search_field = params.search_field;
     if (params.search_value !== undefined) requestParams.search_value = params.search_value;
@@ -273,6 +277,9 @@ class LingXingPurchaseService extends LingXingApiClient {
     if (params.start_date !== undefined) requestParams.start_date = params.start_date;
     if (params.end_date !== undefined) requestParams.end_date = params.end_date;
     if (params.time_type !== undefined) requestParams.time_type = parseInt(params.time_type);
+    if (requestParams.start_date != null && requestParams.end_date != null && requestParams.time_type === undefined) {
+      requestParams.time_type = 1;
+    }
     if (params.search_field !== undefined) requestParams.search_field = params.search_field;
     if (params.search_value !== undefined) requestParams.search_value = params.search_value;
     if (params.product_type !== undefined) requestParams.product_type = Array.isArray(params.product_type) ? params.product_type : [params.product_type];
@@ -300,6 +307,9 @@ class LingXingPurchaseService extends LingXingApiClient {
     if (params.start_date !== undefined) requestParams.start_date = params.start_date;
     if (params.end_date !== undefined) requestParams.end_date = params.end_date;
     if (params.time_type !== undefined) requestParams.time_type = parseInt(params.time_type);
+    if (requestParams.start_date != null && requestParams.end_date != null && requestParams.time_type === undefined) {
+      requestParams.time_type = 1;
+    }
     if (params.product_type !== undefined) requestParams.product_type = Array.isArray(params.product_type) ? params.product_type : [params.product_type];
     const response = await this.post(account, '/basicOpen/report/purchase/buyer/list', requestParams, { successCode: [0, 200, '200'] });
     if (response.code !== 0 && response.code !== 200 && response.code !== '200') {
@@ -309,21 +319,27 @@ class LingXingPurchaseService extends LingXingApiClient {
   }
 
   /**
-   * 按天保存采购报表-产品/供应商/采购员（软删当日主表后插入一条）
+   * 按天保存采购报表-产品/供应商/采购员（有 History 表时先迁入 History 再删主表，否则软删）
    */
   async _savePurchaseReportForDay(modelName, accountId, eventDate, records) {
     const eventDateStr = String(eventDate || '').trim().slice(0, 10);
     const model = prisma[modelName];
     if (!model) return;
     const existing = await model.findMany({
-      where: { accountId, eventDate: eventDateStr, archived: false },
+      where: { accountId, eventDate: eventDateStr},
       select: { id: true }
     });
     if (existing.length > 0) {
-      await model.updateMany({
-        where: { id: { in: existing.map(r => r.id) } },
-        data: { archived: true, updatedAt: new Date() }
-      });
+      const ids = existing.map(r => r.id);
+      const historyModelName = `${modelName}History`;
+      if (prisma[historyModelName]) {
+        await moveToHistoryAndDelete(prisma, modelName, historyModelName, { id: { in: ids } });
+      } else {
+        await model.updateMany({
+          where: { id: { in: ids } },
+          data: { archived: true, updatedAt: new Date() }
+        });
+      }
     }
     await model.create({
       data: { accountId, eventDate: eventDateStr, data: records || [], archived: false }

@@ -1963,6 +1963,31 @@ class LingXingAmazonService extends LingXingApiClient {
   }
 
   /**
+   * 将日期范围按最多 maxDays 天拆成多段（领星部分接口要求区间不超过 7 天）
+   * @param {string} startDateStr - YYYY-MM-DD
+   * @param {string} endDateStr - YYYY-MM-DD
+   * @param {number} maxDays - 每段最多天数，默认 7
+   * @returns {Array<{ start_date: string, end_date: string }>}
+   */
+  _getDateRangeChunks(startDateStr, endDateStr, maxDays = 7) {
+    const chunks = [];
+    const start = new Date(startDateStr + 'T00:00:00.000Z');
+    const end = new Date(endDateStr + 'T00:00:00.000Z');
+    let cur = new Date(start.getTime());
+    while (cur <= end) {
+      const chunkEnd = new Date(cur.getTime());
+      chunkEnd.setUTCDate(chunkEnd.getUTCDate() + maxDays - 1);
+      const segmentEnd = chunkEnd > end ? end : chunkEnd;
+      chunks.push({
+        start_date: cur.toISOString().slice(0, 10),
+        end_date: segmentEnd.toISOString().slice(0, 10)
+      });
+      cur.setUTCDate(cur.getUTCDate() + maxDays);
+    }
+    return chunks;
+  }
+
+  /**
    * FBA Inventory Event Detail 报表增量同步（使用 snapshot_date_after / snapshot_date_before，区间最多 7 天）
    */
   async incrementalSyncFbaInventoryEventDetailReport(accountId, options = {}) {
@@ -2018,13 +2043,21 @@ class LingXingAmazonService extends LingXingApiClient {
       }
 
       try {
-        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 拉取 ${dateRange.start_date} ~ ${dateRange.end_date} ...`);
-        const fetchResult = await this.fetchAllFbaInventoryEventDetailReport(accountId, {
-          sid,
-          snapshot_date_after: dateRange.start_date,
-          snapshot_date_before: dateRange.end_date
-        }, { pageSize, delayBetweenPages });
-        const recordCount = fetchResult?.total ?? fetchResult?.data?.length ?? 0;
+        const chunks = this._getDateRangeChunks(dateRange.start_date, dateRange.end_date, 7);
+        console.log(`${LOG_PREFIX} [${taskType}] accountId=${accountId} sid=${sid} 拉取 ${dateRange.start_date} ~ ${dateRange.end_date}（${chunks.length} 段，每段最多7天）...`);
+        let recordCount = 0;
+        const delayBetweenChunks = options.delayBetweenShops ?? 500;
+        for (let c = 0; c < chunks.length; c++) {
+          const chunk = chunks[c];
+          const fetchResult = await this.fetchAllFbaInventoryEventDetailReport(accountId, {
+            sid,
+            snapshot_date_after: chunk.start_date,
+            snapshot_date_before: chunk.end_date
+          }, { pageSize, delayBetweenPages });
+          const n = fetchResult?.total ?? fetchResult?.data?.length ?? 0;
+          recordCount += n;
+          if (c < chunks.length - 1 && delayBetweenChunks > 0) await new Promise(r => setTimeout(r, delayBetweenChunks));
+        }
         totalRecords += recordCount;
 
         await syncState.upsertSyncState(accountId, taskType, sid, {

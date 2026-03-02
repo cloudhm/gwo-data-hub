@@ -428,6 +428,10 @@ class LingXingApiClient {
         const errorCode = String(responseCode);
         const error = createError(errorCode);
         error.response = response.data;
+        if (response.data?.message) error.message = response.data.message;
+        if (Array.isArray(response.data?.error_details) && response.data.error_details.length) {
+          error.message = (error.message || '') + ': ' + response.data.error_details.join('; ');
+        }
         throw error;
       }
 
