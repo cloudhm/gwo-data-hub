@@ -63,7 +63,24 @@ const MODEL_HISTORY_PAIRS = [
   ['lingXingPurchaseReportBuyer', 'lingXingPurchaseReportBuyerHistory'],
   ['lingXingReturnOrderAnalysis', 'lingXingReturnOrderAnalysisHistory'],
   ['lingXingOperateLog', 'lingXingOperateLogHistory'],
-  ['lingXingFbaStorageFeeMonth', 'lingXingFbaStorageFeeMonthHistory']
+  ['lingXingFbaStorageFeeMonth', 'lingXingFbaStorageFeeMonthHistory'],
+  // 报表/产品表现/ASIN360/利润统计/库存报表/关键词（按 schema 中 History 表补全）
+  ['lingXingSalesReport', 'lingXingSalesReportHistory'],
+  ['lingXingSalesReportItem', 'lingXingSalesReportItemHistory'],
+  ['lingXingProductPerformance', 'lingXingProductPerformanceHistory'],
+  ['lingXingProductPerformancePage', 'lingXingProductPerformancePageHistory'],
+  ['lingXingAsin360HourData', 'lingXingAsin360HourDataHistory'],
+  ['lingXingMskuProfitStatistics', 'lingXingMskuProfitStatisticsHistory'],
+  ['lingXingMskuProfitStatisticsItem', 'lingXingMskuProfitStatisticsItemHistory'],
+  ['lingXingStorageReportLocalAggregate', 'lingXingStorageReportLocalAggregateHistory'],
+  ['lingXingStorageReportLocalDetail', 'lingXingStorageReportLocalDetailHistory'],
+  ['lingXingStorageReportOverseasAggregate', 'lingXingStorageReportOverseasAggregateHistory'],
+  ['lingXingStorageReportOverseasDetail', 'lingXingStorageReportOverseasDetailHistory'],
+  ['lingXingStorageReportFbaGather', 'lingXingStorageReportFbaGatherHistory'],
+  ['lingXingStorageReportFbaDetail', 'lingXingStorageReportFbaDetailHistory'],
+  ['lingXingKeywordRank', 'lingXingKeywordRankHistory'],
+  ['lingXingAsinProfitReport', 'lingXingAsinProfitReportHistory'],
+  ['lingXingParentAsinProfitReport', 'lingXingParentAsinProfitReportHistory']
 ];
 
 async function main() {
