@@ -53,7 +53,7 @@ export const SYNC_TASKS = [
   // /api/lingxing/sync/run-full/warehouses
   ['warehouses', '仓库-仓库全量同步', 1],
   // /api/lingxing/sync/run-full/warehouseBins
-  ['warehouseBins', '仓库-仓库库位全量同步', 1],
+  // ['warehouseBins', '仓库-仓库库位全量同步', 1],
   // /api/lingxing/sync/run-full/inventoryDetails
   ['inventoryDetails', '仓库-库存明细全量同步', 1],
   // /api/lingxing/sync/run-full/fbaWarehouseDetails
