@@ -8,7 +8,8 @@
  *   node src/worker.js --run list              # 列出所有 taskType
  */
 import dotenv from 'dotenv';
-import { startScheduler, stopScheduler } from './workers/scheduler.js';
+import jobTaskStatusService from './services/jobTaskStatusService.js';
+import { startScheduler, stopScheduler, enqueueJob } from './workers/scheduler.js';
 import { runSyncJobByTaskType, SYNC_TASKS } from './workers/jobs/syncJob.js';
 
 dotenv.config();
@@ -66,6 +67,22 @@ const run = async () => {
   // 常驻模式：启动 cron 调度器
   log('Worker 进程启动');
   await startScheduler();
+
+  // PM2 内存重启后恢复：本轮未完成/待执行的任务重新入队（不修改表结构）
+  try {
+    const roundStart = jobTaskStatusService.getRoundStart(new Date());
+    const taskTypes = SYNC_TASKS.map(([t]) => t);
+    const toRecover = await jobTaskStatusService.listTaskTypesNotCompletedInRound(roundStart, taskTypes);
+    if (toRecover.length > 0) {
+      log(`恢复本轮未完成任务: ${toRecover.length} 个 (roundStart: ${roundStart.toISOString()})`);
+      for (const taskType of toRecover) {
+        enqueueJob(`sync-job-${taskType}`, () => runSyncJobByTaskType(taskType, {}));
+      }
+    }
+  } catch (err) {
+    console.error('[Worker] 恢复未完成任务失败:', err?.message ?? err);
+  }
+
   log('调度器已启动，等待定时任务执行');
 };
 

@@ -31,6 +31,16 @@ async function processQueue() {
   }
 }
 
+/**
+ * 外部入队（用于 PM2 重启后恢复本轮未完成的任务，不修改表结构）
+ * @param {string} name - 任务名
+ * @param {() => Promise<void>} handler - 任务函数
+ */
+export function enqueueJob(name, handler) {
+  jobQueue.push({ name, handler });
+  processQueue();
+}
+
 export async function startScheduler() {
   for (const job of jobs) {
     const { name, cronExpression, handler, enabled = true } = job;
