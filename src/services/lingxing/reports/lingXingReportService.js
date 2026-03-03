@@ -685,7 +685,7 @@ class LingXingReportService extends LingXingApiClient {
    * API: POST /basicOpen/salesAnalysis/returnOrder/analysisLists
    * 令牌桶容量: 1，最多支持366天范围
    * @param {string} accountId - 领星账户ID
-   * @param {Object} params - startDate, endDate (yyyy-MM-dd), length, offset; 可选: asinType, dateType, mids, principalUid, searchField, searchValue, sortField, sortType, storeId
+   * @param {Object} params - startDate, endDate (yyyy-MM-dd), length, offset 必填; dateType 未传默认 1(下单时间)，asinType 未传默认 'asin'(枚举: msku|asin|parentAsin|sku|spu); 可选: mids, principalUid, searchField, searchValue, sortField, sortType, storeId
    * @returns {Promise<Object>} { data: { records: [], total }, total }
    */
   async getReturnOrderAnalysisLists(accountId, params = {}) {
@@ -697,10 +697,10 @@ class LingXingReportService extends LingXingApiClient {
       startDate: params.startDate,
       endDate: params.endDate,
       offset: parseInt(params.offset),
-      length: parseInt(params.length)
+      length: parseInt(params.length),
+      dateType: params.dateType !== undefined ? params.dateType : 1,
+      asinType: params.asinType !== undefined ? params.asinType : 'asin'
     };
-    if (params.asinType !== undefined) requestParams.asinType = params.asinType;
-    if (params.dateType !== undefined) requestParams.dateType = params.dateType;
     if (params.mids !== undefined) requestParams.mids = params.mids;
     if (params.principalUid !== undefined) requestParams.principalUid = params.principalUid;
     if (params.searchField !== undefined) requestParams.searchField = params.searchField;
