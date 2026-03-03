@@ -192,13 +192,13 @@ class LingXingToolsService extends LingXingApiClient {
   }
 
   /**
-   * 运营日志(新) 增量同步（按天+summaryType 查询并保存，sids 从 DB 遍历）
+   * 运营日志(新) 增量同步（按天+summaryType 查询并保存，sids 从 DB 遍历，默认只拉取最近 3 天）
    */
   async incrementalSyncOperateLog(accountId, options = {}) {
     const result = await runAccountLevelIncrementalSync(
       accountId,
       'operateLog',
-      { defaultLookbackDays: options.defaultLookbackDays ?? 30, ...options },
+      { defaultLookbackDays: options.defaultLookbackDays ?? 3, ...options },
       (id, params, opts) => this.fetchAllOperateLogByDay(id, params, opts)
     );
     return { results: [result], summary: { successCount: result.success ? 1 : 0, failCount: result.success ? 0 : 1, totalRecords: result.recordCount ?? 0 } };
